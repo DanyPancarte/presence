@@ -88,12 +88,15 @@ vec3 shape(int k, float i, vec3 h, float t) {
         float yy = -0.55 + h.y * (0.08 + lvl * 0.9);
         return vec3(x * A * 0.92 + (fract(h.x * 24.0) - 0.5) * 0.055 * A, yy, -0.2 + row * 0.35 + (h.z * 3.0 - row) * 0.1);
     }
-    if (k == 2) { // STREAM: horizontal data lines, fast, layered in depth
-        float lane = floor(h.y * 40.0);
-        float sp = 0.6 + hash(lane * 3.7) * 1.4;
-        float x = fract(h.x + t * sp * 0.35 * uEnergy) * 2.0 - 1.0;
-        float y = (lane + 0.5) / 40.0 * 2.0 - 1.0 + 0.03 * sin(t * 2.0 + lane);
-        return vec3(x * A * 1.05, y * 0.95, (h.z * 2.0 - 1.0) * 0.9);
+    if (k == 2) { // SCAN: knot tightens; concentric rings breathe out slowly; a scan plane sweeps
+        if (h.z < 0.35) { vec3 c = knot(h.x * 6.2831853 + t * 0.5, h.y) * 0.8; return rotX(0.4) * rotY(t * 0.8) * c; }
+        float ring = floor(h.y * 5.0);
+        float ph = fract(t * 0.12 + ring * 0.2);
+        float rad = 0.25 + ph * 0.9;
+        float ang = h.x * 6.2831853;
+        vec3 p = vec3(cos(ang) * rad * A * 0.8, sin(ang) * rad, (h.z - 0.6) * 1.5);
+        p.y += 0.06 * sin(ang * 6.0 + t);
+        return p;
     }
     if (k == 3) { // WAVE: rippling sheet in the lower third + knot above
         if (h.z < 0.25) { vec3 c = knot(h.x * 6.2831853 + t * 0.1, h.y); return rotX(0.6) * rotY(t * 0.25) * c + vec3(0.0, 0.25, 0.0); }
@@ -116,10 +119,9 @@ void main() {
     vec3 target = mix(shape(uA, seed, h, uT), shape(uB, seed, h, uT), uBlend);
     // Organic life: noise drift + touch repulsion + glitch snaps.
     vec3 n = vec3(snoise(p * 1.6 + vec3(0.0, uT * 0.25, 0.0)), snoise(p * 1.6 + vec3(7.1, 0.0, uT * 0.2)), snoise(p * 1.6 + vec3(0.0, 3.3, -uT * 0.22)));
-    target += n * (0.035 + 0.06 * uAmp) * (1.0 + uJitter * 4.0);
+    target += n * (0.035 + 0.06 * uAmp) * (1.0 + uJitter * 1.5);
     vec2 d = p.xy - uTouch;
     target.xy += normalize(d + 1e-4) * 0.35 * exp(-dot(d, d) * 10.0);
-    if (uGlitch > 0.0 && hash(seed + floor(uT * 30.0)) < uGlitch) target.x += (hash(seed * 3.1 + uT) - 0.5) * 0.5;
     float k = 6.0 + 10.0 * uEnergy;
     v = mix(v, (target - p) * k, 1.0 - exp(-uDt * 8.0));
     p += v * uDt;

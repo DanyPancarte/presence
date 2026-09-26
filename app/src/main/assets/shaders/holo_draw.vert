@@ -18,7 +18,7 @@ void main() {
     float flick = 0.7 + 0.3 * sin(uT * (3.0 + hash(seed) * 9.0) + seed * 7.0);
     float size = (1.0 + 1.2 * depth + hash(seed * 1.3) * 0.9) * uPx;
     size *= 1.0 + aPos.w * 0.8 + uAmp * 0.6;
-    gl_PointSize = size;
+    gl_PointSize = min(size, 6.0 * uPx);
     vec3 cyan = vec3(0.0, 0.94, 1.0), red = vec3(1.0, 0.0, 0.24);
     vec3 c = mix(cyan, uAccent, step(0.86, hash(seed * 5.1)));
     c = mix(c, red, uAlert);

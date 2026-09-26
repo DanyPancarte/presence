@@ -42,6 +42,10 @@ class HoloState {
     /** Transient pulse (0..1), decays. Drives a short glitch burst. */
     @Volatile var pulse = 0f
 
+    /** Accent colour of the highlighted particles (follows the active module). */
+    @Volatile var accent = floatArrayOf(0.99f, 0.93f, 0.04f)
+    @Volatile var accentT = floatArrayOf(0.99f, 0.93f, 0.04f)
+
     // Touch in box coords (x ∈ ±aspect, y ∈ ±1); far away = no effect
     @Volatile var touchX = 99f
     @Volatile var touchY = 99f
@@ -59,5 +63,7 @@ class HoloState {
         parallaxX += (parallaxTX - parallaxX) * (1 - exp(-dt * 3f))
         parallaxY += (parallaxTY - parallaxY) * (1 - exp(-dt * 3f))
         pulse *= exp(-dt * 6f)
+        val k = 1 - exp(-dt * 3f)
+        accent = FloatArray(3) { i -> accent[i] + (accentT[i] - accent[i]) * k }
     }
 }

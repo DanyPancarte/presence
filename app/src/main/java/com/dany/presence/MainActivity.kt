@@ -117,11 +117,7 @@ class MainActivity : ComponentActivity() {
             ) {
                 AndroidView(factory = { view }, modifier = Modifier.fillMaxSize())
                 Overlays(scene, holo, modules.dao, Modifier.fillMaxSize())
-                if (showSettings) SettingsDialog(
-                    key = convo.gemini.apiKey, model = convo.gemini.model,
-                    onSave = { k, m -> convo.gemini.apiKey = k; convo.gemini.model = m; showSettings = false },
-                    onDismiss = { showSettings = false },
-                )
+                if (showSettings) SettingsDialog(convo.llm) { showSettings = false }
             }
         }
     }
@@ -154,20 +150,34 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() { speech.release(); super.onDestroy() }
 }
 
-/** Hidden settings (long press): the Gemini key never leaves the phone. */
+/** Hidden settings (long press): provider, keys and models. Keys never leave the phone. */
 @Composable
-fun SettingsDialog(key: String, model: String, onSave: (String, String) -> Unit, onDismiss: () -> Unit) {
-    var k by remember { mutableStateOf(key) }
-    var m by remember { mutableStateOf(model) }
+fun SettingsDialog(llm: com.dany.presence.brain.Llm, onClose: () -> Unit) {
+    var provider by remember { mutableStateOf(llm.provider) }
+    val keys = remember { mutableStateOf(com.dany.presence.brain.Provider.entries.associateWith { llm.key(it) }) }
+    val models = remember { mutableStateOf(com.dany.presence.brain.Provider.entries.associateWith { llm.model(it) }) }
     AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = { onSave(k, m) }) { Text("Garder") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } },
+        onDismissRequest = onClose,
+        confirmButton = {
+            TextButton(onClick = {
+                llm.provider = provider
+                keys.value.forEach { (p, k) -> llm.setKey(p, k) }
+                models.value.forEach { (p, m) -> llm.setModel(p, m) }
+                onClose()
+            }) { Text("Garder") }
+        },
+        dismissButton = { TextButton(onClick = onClose) { Text("Annuler") } },
         title = { Text("Cerveau") },
         text = {
             Column {
-                OutlinedTextField(value = k, onValueChange = { k = it }, label = { Text("Clé API Gemini") }, singleLine = true)
-                OutlinedTextField(value = m, onValueChange = { m = it }, label = { Text("Modèle") }, singleLine = true)
+                com.dany.presence.brain.Provider.entries.forEach { p ->
+                    androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        androidx.compose.material3.RadioButton(selected = provider == p, onClick = { provider = p })
+                        Text(p.label)
+                    }
+                    OutlinedTextField(value = keys.value[p] ?: "", onValueChange = { keys.value = keys.value + (p to it) }, label = { Text("Clé ${p.name.lowercase()}") }, singleLine = true)
+                    OutlinedTextField(value = models.value[p] ?: "", onValueChange = { models.value = models.value + (p to it) }, label = { Text("Modèle") }, singleLine = true)
+                }
             }
         },
     )

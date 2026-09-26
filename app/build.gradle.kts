@@ -24,6 +24,7 @@ android {
         versionName = "0.1"
         // Gemini key: local.properties (never committed) → BuildConfig. Overridable in the hidden settings.
         buildConfigField("String", "GEMINI_API_KEY", "\"${localProps.getProperty("gemini.api.key", "")}\"")
+        buildConfigField("String", "CLAUDE_API_KEY", "\"${localProps.getProperty("claude.api.key", "")}\"")
     }
 
     buildTypes {

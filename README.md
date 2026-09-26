@@ -47,7 +47,7 @@ Sans câble : envoyer l'APK sur le téléphone (Drive, mail), l'ouvrir, autorise
 | Au premier lancement (pop-up) | **Appareils à proximité** (Bluetooth) | Voix dans les écouteurs |
 | Paramètres → Apps → Présence → Notifications | **Notifications plein écran** (Android 14+) | Sinon la relance reste une bannière |
 | Paramètres → Apps → Présence → Batterie | **Sans restriction** | Les alarmes à 17h30 / 20h30 / 8h doivent réveiller le téléphone |
-| Dans l'app : **appui long 3 s** | **Clé API Gemini** (aistudio.google.com → *Get API key*) | Le cerveau. Reste sur le téléphone. |
+| Dans l'app : **appui long 3 s** | **Clé API** : Gemini (aistudio.google.com → *Get API key*, palier gratuit sans carte) ou Claude (console.anthropic.com, payant) | Le cerveau. Reste sur le téléphone. |
 
 Reconnaissance hors ligne : Paramètres → Système → Langues → Saisie vocale → ajouter **Français (Canada)** au pack hors ligne.
 
@@ -77,7 +77,8 @@ Le module s'affiche aussi sans parler : swipe vertical.
 - `render/` — `HoloRenderer` : simulation par transform feedback (90k particules), points additifs, bloom quart de résolution, composite (glitch, aberration, scanlines, vignette, grain). Shaders dans `app/src/main/assets/shaders/`.
 - `audio/AudioReactor` — AudioRecord 16 kHz + FFT : niveau, 24 bandes, transitoires.
 - `voice/Speech` — SpeechRecognizer + TextToSpeech fr-CA.
-- `brain/` — `GeminiClient` (REST, mode JSON), `Persona` (prompt système), `Conversation` (la boucle et la scène observée par Compose).
+- `brain/` — `Llm` (Gemini ou Claude, REST, sortie JSON), `Persona`, `Intent` (détection lexicale instantanée sur la transcription partielle), `Conversation` (la boucle, la bande d'état et la scène observée par Compose).
+- `voice/RadioVoice` — la voix Google passe dans une chaîne radio (bande passante, saturation, souffle, squelch) avant d'être jouée.
 - `data/` — Room (`Db.kt`) et `Modules` (actions → base, contexte → agent).
 - `ui/` — palette et panneaux Cyberpunk (`Theme.kt`, `Panels.kt`).
 - `ritual/` — alarmes exactes + full-screen intent + reboot.

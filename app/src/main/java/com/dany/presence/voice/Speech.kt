@@ -15,6 +15,7 @@ class Speech(private val context: Context) {
     private val locale = Locale("fr", "CA")
     private var recognizer: SpeechRecognizer? = null
     private var tts: TextToSpeech? = null
+    val radio = RadioVoice(context) { if (ttsReady) tts else null }
     private var ttsReady = false
     private var pendingSpeak: Pair<String, () -> Unit>? = null
 
@@ -86,19 +87,10 @@ class Speech(private val context: Context) {
     fun speak(text: String, onDone: () -> Unit = {}) {
         val t = tts
         if (t == null || !ttsReady) { pendingSpeak = text to onDone; return }
-        val id = "p${System.nanoTime()}"
-        t.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) = Unit
-            override fun onDone(utteranceId: String?) { if (utteranceId == id) onDone() }
-            @Deprecated("Deprecated in Java")
-            override fun onError(utteranceId: String?) { if (utteranceId == id) onDone() }
-        })
-        // STREAM_MUSIC routes to Bluetooth headphones when connected.
-        val params = Bundle().apply { putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, android.media.AudioManager.STREAM_MUSIC) }
-        t.speak(text, TextToSpeech.QUEUE_FLUSH, params, id)
+        radio.speak(text, onDone)
     }
 
-    fun stopSpeaking() { tts?.stop() }
+    fun stopSpeaking() { tts?.stop(); radio.stop() }
 
     fun release() {
         stopListening()

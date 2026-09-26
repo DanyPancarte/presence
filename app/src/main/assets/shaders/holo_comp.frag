@@ -11,7 +11,7 @@ float hash(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx
 void main() {
     vec2 uv = vUv;
     float band = floor(uv.y * 40.0);
-    if (uGlitch > 0.0 && hash(vec2(band, floor(uT * 24.0))) < uGlitch * 0.6) uv.x += (hash(vec2(band, 1.0)) - 0.5) * 0.06;
+    if (uGlitch > 0.0 && hash(vec2(band, floor(uT * 12.0))) < uGlitch * 0.35) uv.x += (hash(vec2(band, 1.0)) - 0.5) * 0.025;
     vec2 cc = uv - 0.5;
     vec2 ca = cc * dot(cc, cc) * 0.02;
     vec3 s;

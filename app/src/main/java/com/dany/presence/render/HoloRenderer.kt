@@ -21,8 +21,6 @@ class HoloRenderer(private val context: Context, val state: HoloState) : GLSurfa
 
     var renderScale = 0.75f
     val particles = 90_000
-    /** Accent colour for the ~14% highlighted particles (Cyberpunk yellow). */
-    var accent = floatArrayOf(0.99f, 0.93f, 0.04f)
 
     private lateinit var pSim: GlProgram
     private lateinit var pDraw: GlProgram
@@ -137,7 +135,7 @@ class HoloRenderer(private val context: Context, val state: HoloState) : GLSurfa
         glUniformMatrix4fv(d.u("uProj"), 1, false, proj, 0)
         glUniform1f(d.u("uPx"), H / 900f); glUniform1f(d.u("uT"), t); glUniform1f(d.u("uAlert"), s.alert); glUniform1f(d.u("uAmp"), s.amp)
         glUniform2f(d.u("uParallax"), s.parallaxX, s.parallaxY)
-        glUniform3f(d.u("uAccent"), accent[0], accent[1], accent[2])
+        glUniform3f(d.u("uAccent"), s.accent[0], s.accent[1], s.accent[2])
         glBindVertexArray(vaos[cur])
         glDrawArrays(GL_POINTS, 0, particles)
         glBindVertexArray(emptyVao)
