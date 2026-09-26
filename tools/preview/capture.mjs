@@ -24,18 +24,18 @@ page.on('console', m => console.log('[page]', m.text()));
 let loaded = null;
 for (const j of jobs) {
   const w = j.w || 900, h = j.h || 2000;
-  const key = `${j.variant}-${w}-${h}`;
+  const key = `${j.n}-${w}-${h}`;
   if (loaded !== key) {
     await page.setViewportSize({ width: w, height: h });
-    await page.goto(`http://localhost:${port}/tools/preview/index.html?variant=${j.variant}&w=${w}&h=${h}`);
+    await page.goto(`http://localhost:${port}/tools/preview/index.html?w=${w}&h=${h}&n=${j.n || 150000}`);
     await page.waitForFunction(() => window.ready || window.error, null, { timeout: 120000 });
     const err = await page.evaluate(() => window.error);
     if (err) { console.error(err); process.exit(1); }
     loaded = key;
   }
   const t0 = Date.now();
-  const hdr = await page.evaluate(([t, o]) => window.renderAt(t, o), [j.t, j.o || {}]);
-  await page.locator('canvas').screenshot({ path: j.out });
+  const hdr = await page.evaluate(([t, pr, o]) => window.run(t, pr, o), [j.t, j.preset, j.o || {}]);
+  await page.locator('canvas').screenshot({ path: j.out, timeout: 600000 });
   console.log(j.out, `hdr=${hdr}`, `${Date.now() - t0}ms`);
 }
 await browser.close();

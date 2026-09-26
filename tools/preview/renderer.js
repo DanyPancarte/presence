@@ -51,47 +51,85 @@ function axisAngle(ax, a) {
 // Smooth pseudo-noise for the orientation drift (sum of incommensurate sines — mirrors Kotlin).
 function drift(t, k) { return Math.sin(t * 0.071 * k + 1.3 * k) * 0.6 + Math.sin(t * 0.0313 * k + 0.7) * 0.4; }
 
-class SphereRenderer {
-  constructor(canvas) {
+
+function compileTF(gl, vsSrc, fsSrc, varyings) {
+  const mk = (type, src) => {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+    return s;
+  };
+  const p = gl.createProgram();
+  gl.attachShader(p, mk(gl.VERTEX_SHADER, vsSrc));
+  gl.attachShader(p, mk(gl.FRAGMENT_SHADER, fsSrc));
+  gl.transformFeedbackVaryings(p, varyings, gl.INTERLEAVED_ATTRIBS);
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const u = {};
+  const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for (let i = 0; i < n; i++) { const info = gl.getActiveUniform(p, i); u[info.name.replace(/\[0\]$/, '')] = gl.getUniformLocation(p, info.name); }
+  return { p, u };
+}
+
+class Organism {
+  constructor(canvas, count) {
     this.canvas = canvas;
+    this.N = count || 150000;
     const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, preserveDrawingBuffer: true });
     if (!gl) throw new Error('no webgl2');
     this.gl = gl;
     this.hdr = !!gl.getExtension('EXT_color_buffer_float');
     gl.getExtension('OES_texture_float_linear');
+    this.simTime = 0; this.frame = 0; this.acc = 0; this.cur = 0;
   }
 
   async init() {
     const gl = this.gl;
-    const [fv, ff, fs, bd, bu, co] = await Promise.all(
-      ['filament.vert', 'filament.frag', 'fullscreen.vert', 'bloom_down.frag', 'bloom_up.frag', 'composite.frag'].map(n => loadText(SHADERS + n)));
-    this.pFil = compile(gl, fv, ff);
-    this.pDown = compile(gl, fs, bd);
-    this.pUp = compile(gl, fs, bu);
-    this.pComp = compile(gl, fs, co);
+    const names = ['sim.vert', 'sim.frag', 'particle.vert', 'streak.frag', 'fullscreen.vert', 'fade.frag', 'bloom_down.frag', 'bloom_up.frag', 'composite.frag'];
+    const src = {};
+    (await Promise.all(names.map(n => loadText(SHADERS + n)))).forEach((t, i) => src[names[i]] = t);
+    this.pSim = compileTF(gl, src['sim.vert'], src['sim.frag'], ['oPos', 'oVel']);
+    this.pPart = compile(gl, src['particle.vert'], src['streak.frag']);
+    this.pFade = compile(gl, src['fullscreen.vert'], src['fade.frag']);
+    this.pDown = compile(gl, src['fullscreen.vert'], src['bloom_down.frag']);
+    this.pUp = compile(gl, src['fullscreen.vert'], src['bloom_up.frag']);
+    this.pComp = compile(gl, src['fullscreen.vert'], src['composite.frag']);
     this.emptyVao = gl.createVertexArray();
-  }
 
-  setGeometry(floats) {
-    const gl = this.gl;
-    this.count = floats.length / 16;
-    const vao = gl.createVertexArray();
-    gl.bindVertexArray(vao);
+    // Initial state: particles scattered in the ball with random ages (no synchronised births).
+    const data = new Float32Array(this.N * 8);
+    let s = 1234567;
+    const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+    for (let i = 0; i < this.N; i++) {
+      let x, y, z;
+      do { x = rnd() * 2 - 1; y = rnd() * 2 - 1; z = rnd() * 2 - 1; } while (x * x + y * y + z * z > 1);
+      const o = i * 8;
+      data[o] = x; data[o + 1] = y; data[o + 2] = z; data[o + 3] = rnd() * 12;
+      data[o + 7] = rnd() * 1000;
+    }
     const quad = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, quad);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, -1, 1, -1, 0, 1, 1, 1]), gl.STATIC_DRAW);
-    gl.enableVertexAttribArray(0);
-    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 8, 0);
-    const inst = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, inst);
-    gl.bufferData(gl.ARRAY_BUFFER, floats, gl.STATIC_DRAW);
-    for (let i = 0; i < 4; i++) {
-      gl.enableVertexAttribArray(1 + i);
-      gl.vertexAttribPointer(1 + i, 4, gl.FLOAT, false, 64, i * 16);
-      gl.vertexAttribDivisor(1 + i, 1);
-    }
+    this.bufs = [0, 1].map(() => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_COPY); return b; });
+    this.simVao = this.bufs.map(b => {
+      const v = gl.createVertexArray(); gl.bindVertexArray(v);
+      gl.bindBuffer(gl.ARRAY_BUFFER, b);
+      gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 32, 0);
+      gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 32, 16);
+      return v;
+    });
+    this.drawVao = this.bufs.map(b => {
+      const v = gl.createVertexArray(); gl.bindVertexArray(v);
+      gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+      gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 8, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, b);
+      gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 32, 0); gl.vertexAttribDivisor(1, 1);
+      gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 4, gl.FLOAT, false, 32, 16); gl.vertexAttribDivisor(2, 1);
+      return v;
+    });
     gl.bindVertexArray(null);
-    this.vao = vao;
+    this.tf = gl.createTransformFeedback();
+    this.count = this.N;
   }
 
   target(w, h) {
@@ -107,6 +145,7 @@ class SphereRenderer {
     const fbo = gl.createFramebuffer();
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
     return { tex, fbo, w, h };
   }
 
@@ -119,12 +158,59 @@ class SphereRenderer {
     for (let i = 0; i < 7 && mw > 4 && mh > 4; i++) { this.mips.push(this.target(mw, mh)); mw >>= 1; mh >>= 1; }
   }
 
-  // p: behaviour parameters (see SphereState.kt for their meaning)
-  draw(t, p) {
-    const gl = this.gl, W = this.W, H = this.H;
-    const hdrScale = this.hdr ? 1 : 6;
+  // One fixed simulation step.
+  step(dt, p) {
+    const gl = this.gl, S = this.pSim, t = this.simTime;
+    const pr = p.preset;
+    gl.useProgram(S.p);
+    // Per-axis pull breathes on its own slow, unrelated rhythms: never the same shape twice.
+    const ax = [drift(t, 0.61), drift(t + 40, 0.43), drift(t + 90, 0.77)];
+    const energy = p.energy;
+    gl.uniform1f(S.u.uTime, t);
+    gl.uniform1f(S.u.uDt, dt);
+    gl.uniform1f(S.u.uFrame, this.frame % 100000);
+    gl.uniform3f(S.u.uAttract, pr.attract[0] * (1 + 0.55 * ax[0]), pr.attract[1] * (1 + 0.55 * ax[1]), pr.attract[2] * (1 + 0.55 * ax[2]));
+    gl.uniform1f(S.u.uCurl, pr.curl * (0.8 + 0.4 * energy));
+    gl.uniform1f(S.u.uCurlScale, pr.curlScale);
+    gl.uniform1f(S.u.uCurlSpeed, 0.12 * energy);
+    const a = t * 0.047, b = t * 0.031 + 1.0;
+    gl.uniform3f(S.u.uSwirlAxis, Math.sin(a) * 0.45, Math.cos(b) * 0.3 + 0.85, Math.cos(a) * 0.45);
+    gl.uniform1f(S.u.uSwirl, pr.swirl * (0.7 + 0.5 * energy) * (1 + 0.35 * drift(t + 13, 0.5)));
+    gl.uniform1f(S.u.uShellR, 1.0 + p.dilate);
+    gl.uniform1f(S.u.uLife, p.life);
+    gl.uniform1f(S.u.uStreams, pr.streams);
+    gl.uniform2f(S.u.uShock, (p.shock || [0, 0])[0], (p.shock || [0, 0])[1]);
+    gl.uniform1f(S.u.uAmp, p.amp || 0);
+    gl.uniform1f(S.u.uCoreR, 0.045);
+    const src = this.cur, dst = 1 - src;
+    gl.bindVertexArray(this.simVao[src]);
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, this.tf);
+    gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, this.bufs[dst]);
+    gl.enable(gl.RASTERIZER_DISCARD);
+    gl.beginTransformFeedback(gl.POINTS);
+    gl.drawArrays(gl.POINTS, 0, this.N);
+    gl.endTransformFeedback();
+    gl.disable(gl.RASTERIZER_DISCARD);
+    gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, null);
+    gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, null);
+    gl.bindVertexArray(null);
+    this.cur = dst;
+    this.simTime += dt;
+    this.frame++;
+  }
 
-    // Camera: fit sphere diameter to p.fill of the screen width.
+  // Advance real time dt with fixed 1/60 steps, then render.
+  update(dt, p) {
+    this.acc += Math.min(dt, 0.1);
+    let n = 0;
+    while (this.acc >= 1 / 60 && n < 3) { this.step(1 / 60, p); this.acc -= 1 / 60; n++; }
+    this.draw(dt, p);
+  }
+
+  draw(dt, p) {
+    const gl = this.gl, W = this.W, H = this.H, t = this.simTime;
+    const hdrScale = this.hdr ? 1 : 6;
     const fovY = 30 * Math.PI / 180;
     const aspect = W / H;
     const tanX = Math.tan(fovY / 2) * aspect;
@@ -132,46 +218,43 @@ class SphereRenderer {
     const proj = perspective(fovY, aspect, 0.1, 50);
     const par = p.parallax || [0, 0];
     const view = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -par[0], -par[1] + p.lift, -dist, 1]);
+    const model = mat3Mul(rotX(0.25 + drift(t, 0.53) * 0.1), rotY(t * 0.03));
 
-    const yaw = t * 0.06 + drift(t, 0.37) * 0.25;
-    const pitch = 0.32 + drift(t, 0.53) * 0.12;
-    const roll = drift(t, 0.29) * 0.09;
-    const model = mat3Mul(rotZ(roll), mat3Mul(rotX(pitch), rotY(yaw)));
-    const coreSpin = mat3Mul(rotX(0.95), axisAngle([0.2146, 0.9755, 0.1170], t * 0.45));
-
-    // ---- scene pass ----
+    // ---- scene: fade previous frame (trails), then add streaks ----
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.scene.fbo);
     gl.viewport(0, 0, W, H);
-    gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
-    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
-    const F = this.pFil; gl.useProgram(F.p);
+    gl.bindVertexArray(this.emptyVao);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ZERO, gl.SRC_ALPHA);
+    gl.useProgram(this.pFade.p);
+    gl.uniform1f(this.pFade.u.uDecay, Math.pow(p.trail, Math.max(dt, 1 / 240) * 60));
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    gl.blendFunc(gl.ONE, gl.ONE);
+    const F = this.pPart; gl.useProgram(F.p);
     gl.uniformMatrix4fv(F.u.uView, false, view);
     gl.uniformMatrix4fv(F.u.uProj, false, proj);
     gl.uniformMatrix3fv(F.u.uModel, false, model);
-    gl.uniformMatrix3fv(F.u.uCoreSpin, false, coreSpin);
     gl.uniform2f(F.u.uViewport, W, H);
     gl.uniform1f(F.u.uTime, t);
     gl.uniform1f(F.u.uPxScale, H / 2400);
+    gl.uniform1f(F.u.uStreak, p.streak);
     gl.uniform1f(F.u.uFocusDist, dist - p.focus);
     gl.uniform1f(F.u.uCocScale, p.coc);
-    gl.uniform1f(F.u.uMaxCoc, 18);
+    gl.uniform1f(F.u.uMaxCoc, 14);
     gl.uniform3f(F.u.uCenterView, -par[0], -par[1] + p.lift, -dist);
     gl.uniform1f(F.u.uBodyRadius, 0.96);
     gl.uniform1f(F.u.uBodyDensity, p.bodyDensity);
-    gl.uniform1f(F.u.uDilate, p.dilate);
-    gl.uniform1f(F.u.uFlowSpeed, p.flowSpeed);
-    gl.uniform1f(F.u.uFlowAmt, p.flowAmt);
+    gl.uniform1f(F.u.uGain, p.gain * (1 - p.trail) * 3.3);
+    gl.uniform1f(F.u.uCoreGain, p.coreGain);
     gl.uniform1f(F.u.uTwinkle, p.twinkle);
+    gl.uniform1f(F.u.uAlert, p.alert);
+    gl.uniform1f(F.u.uTemp, p.temp);
+    gl.uniform1f(F.u.uDensity, p.density);
+    gl.uniform1f(F.u.uLife, p.life);
     gl.uniform1f(F.u.uSweep, p.sweep);
     gl.uniform1f(F.u.uSweepPos, Math.sin(t * 1.7));
     gl.uniform3f(F.u.uSweepAxis, 0.3, 0.9, 0.3);
-    gl.uniform1f(F.u.uGain, p.gain);
-    gl.uniform1f(F.u.uCoreGain, p.coreGain);
-    gl.uniform1f(F.u.uAlert, p.alert);
-    gl.uniform1f(F.u.uDensity, p.density);
-    gl.uniform1f(F.u.uTemp, p.temp);
-    gl.uniform1f(F.u.uBreath, Math.sin(t * 0.9) * 0.5 + Math.sin(t * 0.37) * 0.5);
-    gl.uniform1f(F.u.uAmp, p.amp || 0);
     gl.uniform4fv(F.u.uBands, p.bands || [0, 0, 0, 0]);
     gl.uniform2f(F.u.uShock, (p.shock || [0, 0])[0], (p.shock || [0, 0])[1]);
     const zones = p.zones || [];
@@ -180,11 +263,11 @@ class SphereRenderer {
       gl.uniform4fv(F.u.uZones, new Float32Array(zones.flatMap(z => z.zone)));
       gl.uniform4fv(F.u.uZoneParams, new Float32Array(zones.flatMap(z => z.params)));
     }
-    gl.bindVertexArray(this.vao);
-    gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, this.count);
+    gl.bindVertexArray(this.drawVao[this.cur]);
+    gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, this.N);
     gl.bindVertexArray(this.emptyVao);
 
-    // ---- bloom: down chain ----
+    // ---- bloom ----
     const D = this.pDown;
     gl.disable(gl.BLEND);
     gl.useProgram(D.p);
@@ -202,7 +285,6 @@ class SphereRenderer {
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       src = m;
     });
-    // ---- bloom: up chain (additive) ----
     const U = this.pUp;
     gl.useProgram(U.p);
     gl.uniform1i(U.u.uSrc, 0);
@@ -229,7 +311,6 @@ class SphereRenderer {
     gl.uniform1i(C.u.uScene, 0);
     gl.uniform1i(C.u.uBloom, 1);
     gl.uniform2f(C.u.uResolution, W, H);
-    // Projected sphere circle.
     const f = 1 / Math.tan(fovY / 2);
     const cy = (p.lift - par[1]) / dist * f;
     const cx = -par[0] / dist * f / aspect;
@@ -248,13 +329,20 @@ class SphereRenderer {
   }
 }
 
-// Default VEILLE look. Keep in sync with SphereState.kt (StateTargets.IDLE + Look).
+// Organism presets (swipe) and default VEILLE look. Keep in sync with Organism.kt.
+const PRESETS = {
+  vortex:     { label: 'A · Vortex',     attract: [0.42, 0.30, 0.38], curl: 0.55, curlScale: 1.6, swirl: 0.55, streams: 0.35 },
+  essaim:     { label: 'B · Essaim',     attract: [0.30, 0.30, 0.30], curl: 1.25, curlScale: 2.2, swirl: 0.12, streams: 0.15 },
+  tentacules: { label: 'C · Tentacules', attract: [0.55, 0.16, 0.34], curl: 0.8,  curlScale: 1.3, swirl: 0.3,  streams: 0.8 },
+};
 const DEFAULTS = {
-  fill: 0.86, lift: 0.0, focus: 0.75, coc: 7.0, bodyDensity: 2.6,
-  dilate: 0.0, flowSpeed: 1.2, flowAmt: 0.6, twinkle: 1.0, sweep: 0.0,
-  gain: 1.2, coreGain: 3.5, alert: 0.0, density: 1.0, temp: 0.0,
+  fill: 0.86, lift: 0.0, focus: 0.75, coc: 6.0, bodyDensity: 1.3,
+  dilate: 0.0, energy: 1.0, twinkle: 1.0, sweep: 0.0,
+  gain: 0.4, coreGain: 1.0, alert: 0.0, density: 1.0, temp: 0.0,
   threshold: 0.9, bloom: 0.9, bloomSpread: 0.85, exposure: 1.0, halo: 1.0,
+  trail: 0.9, streak: 0.05, life: 9.0,
 };
 
-window.SphereRenderer = SphereRenderer;
+window.Organism = Organism;
+window.PRESETS = PRESETS;
 window.DEFAULTS = DEFAULTS;

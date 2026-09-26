@@ -37,13 +37,13 @@ import androidx.core.view.WindowInsetsControllerCompat
 import com.dany.presence.render.Mood
 import com.dany.presence.render.SphereState
 import com.dany.presence.render.SphereView
-import com.dany.presence.sphere.FilamentStyle
+import com.dany.presence.render.Organism
 import kotlin.math.abs
 
 /**
  * Zero chrome: the sphere is the interface. Étape 2 (validation du rendu) — gestes de test :
  *  - tap           → cycle des états (VEILLE → ÉCOUTE → RÉFLEXION → RÉPONSE → ALERTE)
- *  - swipe horizontal → variante de filaments (A/B/C/D)
+ *  - swipe horizontal → comportement de l'organisme (A/B/C)
  * Le swipe vertical est réservé aux modules (étape 5).
  */
 class MainActivity : ComponentActivity() {
@@ -61,7 +61,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             var line by remember { mutableStateOf("") }
-            var styleIdx by remember { mutableStateOf(FilamentStyle.METROPOLE.ordinal) }
+            var styleIdx by remember { mutableStateOf(0) }
             Box(
                 Modifier
                     .fillMaxSize()
@@ -79,11 +79,11 @@ class MainActivity : ComponentActivity() {
                             onDragStart = { dx = 0f; dy = 0f },
                             onDragEnd = {
                                 if (abs(dx) > abs(dy) && abs(dx) > 120f) {
-                                    val n = FilamentStyle.entries.size
+                                    val n = Organism.entries.size
                                     styleIdx = (styleIdx + (if (dx < 0) 1 else n - 1)) % n
-                                    val st = FilamentStyle.entries[styleIdx]
-                                    sphereView.renderer.load(st)
-                                    line = st.label
+                                    val o = Organism.entries[styleIdx]
+                                    sphereView.renderer.preset = o
+                                    line = o.label
                                 }
                             },
                         ) { _, drag -> dx += drag.x; dy += drag.y }

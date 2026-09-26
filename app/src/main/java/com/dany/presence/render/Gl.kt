@@ -4,7 +4,7 @@ import android.content.res.AssetManager
 import android.opengl.GLES30.*
 import android.util.Log
 
-class GlProgram(assets: AssetManager, vs: String, fs: String) {
+class GlProgram(assets: AssetManager, vs: String, fs: String, feedback: Array<String>? = null) {
     val id: Int
     private val locs = HashMap<String, Int>()
 
@@ -14,6 +14,7 @@ class GlProgram(assets: AssetManager, vs: String, fs: String) {
         id = glCreateProgram()
         glAttachShader(id, v)
         glAttachShader(id, f)
+        if (feedback != null) glTransformFeedbackVaryings(id, feedback, GL_INTERLEAVED_ATTRIBS)
         glLinkProgram(id)
         val ok = IntArray(1)
         glGetProgramiv(id, GL_LINK_STATUS, ok, 0)
@@ -61,6 +62,8 @@ class Target(val w: Int, val h: Int, hdr: Boolean) {
         fbo = f[0]
         glBindFramebuffer(GL_FRAMEBUFFER, fbo)
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0)
+        glClearColor(0f, 0f, 0f, 1f)
+        glClear(GL_COLOR_BUFFER_BIT)
     }
 
     val complete: Boolean

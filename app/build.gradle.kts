@@ -42,7 +42,6 @@ android {
 }
 
 dependencies {
-    implementation(project(":sphere"))
     implementation(platform("androidx.compose:compose-bom:2025.10.01"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.foundation:foundation")

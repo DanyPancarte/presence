@@ -7,7 +7,7 @@ Assistant vocal perso, Android natif (Kotlin + Compose + OpenGL ES 3.0). La sph�
 | Étape | Statut |
 |---|---|
 | 1. Squelette Gradle, permissions, immersive | ✅ |
-| 2. Rendu de la sphère (4 variantes) | ⏳ en validation — voir `docs/captures/` |
+| 2. Rendu : organisme de particules (3 comportements) | ⏳ en validation |
 | 3–6. Micro, cerveau, modules, rituel | à venir |
 
 ## Build
@@ -19,15 +19,15 @@ echo "sdk.dir=$ANDROID_HOME" > local.properties
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Gestes de test (temporaires) : **tap** = cycle des états, **swipe horizontal** = variante de filaments.
+Gestes de test (temporaires) : **tap** = cycle des états, **swipe horizontal** = comportement de l'organisme.
 
 ## Architecture du rendu
 
-- `sphere/` — génération procédurale des filaments (Kotlin pur, JVM) : champ de densité « carte de nuit », 4 styles de croissance, noyau spirale.
-- `app/src/main/assets/shaders/` — filaments instanciés + DOF géométrique, bloom 7 niveaux, composite (halo, corps sombre, ACES, aberration, vignette, grain).
-- `tools/preview/` — banc WebGL2 headless qui exécute **les mêmes shaders** pour produire des captures sans téléphone :
+- **Simulation** (`sim.vert`, transform feedback) : 150k particules naissent sur la coque, sont aspirées vers le noyau par une attraction anisotrope (facteurs X/Y/Z qui respirent chacun à leur rythme), brassées par un champ de turbulence 3D sans divergence et un vortex dont l'axe précesse. Absorbées au noyau, elles renaissent : flux constant, jamais identique.
+- **Rendu** (`particle.vert` + `streak.frag`) : chaque particule = une traînée de vitesse, avec persistance d'image (les filaments sont les traînées) et profondeur de champ géométrique.
+- **Post** : bloom 7 niveaux, corps sombre, halo, ACES, aberration, vignette, grain.
+- `tools/preview/` : banc WebGL2 headless qui exécute **les mêmes shaders** que l'app.
 
 ```bash
-./gradlew :sphere-preview:run --args="$PWD/tools/preview/data"
-cd tools/preview && npm i && node capture.mjs '[{"out":"out/a.png","variant":"metropole","t":12}]'
+cd tools/preview && npm i && node capture.mjs '[{"out":"out/a.png","preset":"vortex","t":4,"n":60000}]'
 ```

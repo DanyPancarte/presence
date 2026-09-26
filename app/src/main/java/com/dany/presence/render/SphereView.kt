@@ -10,7 +10,7 @@ import android.opengl.GLSurfaceView
 
 @SuppressLint("ViewConstructor")
 class SphereView(context: Context, val state: SphereState) : GLSurfaceView(context), SensorEventListener {
-    val renderer = SphereRenderer(context, state)
+    val renderer = OrganismRenderer(context, state)
     private val sensors = context.getSystemService(SensorManager::class.java)
     private var baseX = Float.NaN
     private var baseY = Float.NaN

@@ -7,16 +7,15 @@ enum class Mood { VEILLE, ECOUTE, REFLEXION, REPONSE, ALERTE }
 
 /**
  * Every animated knob of the sphere. Values are shader uniforms (see filament.vert / composite.frag).
- * tools/preview/renderer.js DEFAULTS mirrors [IDLE].
+ * tools/preview/renderer.js DEFAULTS mirrors [IDLE]; the live preview page mirrors every state.
  */
 data class Look(
     val dilate: Float = 0f,
-    val flowSpeed: Float = 1.2f,
-    val flowAmt: Float = 0.6f,
+    val energy: Float = 1f,      // speeds up the turbulence and the vortex
     val twinkle: Float = 1f,
     val sweep: Float = 0f,
-    val gain: Float = 1.2f,
-    val coreGain: Float = 3.5f,
+    val gain: Float = 0.4f,
+    val coreGain: Float = 1f,
     val alert: Float = 0f,
     val bloom: Float = 0.9f,
     val halo: Float = 1f,
@@ -24,10 +23,10 @@ data class Look(
 ) {
     companion object {
         val IDLE = Look()
-        val LISTEN = Look(dilate = 0.05f, flowAmt = 0.9f, gain = 1.4f, coreGain = 4f, halo = 1.25f)
-        val THINK = Look(flowSpeed = 9f, flowAmt = 2.4f, sweep = 1f, twinkle = 0.6f, gain = 1.3f, coreGain = 4.5f)
-        val ANSWER = Look(flowSpeed = 0.6f, flowAmt = 0.3f, twinkle = 0.35f, gain = 1.5f, coreGain = 5f, bloom = 1.1f, halo = 1.35f)
-        val ALERT = Look(flowSpeed = 5f, flowAmt = 1.5f, gain = 1.45f, coreGain = 6f, alert = 1f, bloom = 1.2f, halo = 1.5f)
+        val LISTEN = Look(dilate = 0.05f, energy = 1.4f, gain = 0.5f, coreGain = 1.3f, halo = 1.25f)
+        val THINK = Look(energy = 2.6f, sweep = 1f, twinkle = 0.6f, gain = 0.45f, coreGain = 1.5f)
+        val ANSWER = Look(energy = 0.55f, twinkle = 0.35f, gain = 0.55f, coreGain = 1.8f, bloom = 1.1f, halo = 1.35f)
+        val ALERT = Look(energy = 2.2f, gain = 0.5f, coreGain = 2f, alert = 1f, bloom = 1.2f, halo = 1.5f)
 
         fun of(m: Mood) = when (m) {
             Mood.VEILLE -> IDLE
@@ -61,12 +60,11 @@ class SphereState {
         set(v) { field = v; apply(Look.of(v)) }
 
     val dilate = Spring(0f)
-    val flowSpeed = Spring(1.2f)
-    val flowAmt = Spring(0.6f)
+    val energy = Spring(1f)
     val twinkle = Spring(1f)
     val sweep = Spring(0f)
-    val gain = Spring(1.2f)
-    val coreGain = Spring(3.5f)
+    val gain = Spring(0.4f)
+    val coreGain = Spring(1f)
     val alert = Spring(0f)
     val bloom = Spring(0.9f)
     val halo = Spring(1f)
@@ -85,17 +83,14 @@ class SphereState {
     @Volatile var zones = FloatArray(0)
     @Volatile var zoneParams = FloatArray(0)
 
-    /** Fades freshly generated geometry in. */
-    val reveal = Spring(0f, 0.5f)
-
     // Gyroscope parallax in view units
     @Volatile var parallaxX = 0f
     @Volatile var parallaxY = 0f
 
-    private val all = listOf(dilate, flowSpeed, flowAmt, twinkle, sweep, gain, coreGain, alert, bloom, halo, exposure, density, temp, reveal)
+    private val all = listOf(dilate, energy, twinkle, sweep, gain, coreGain, alert, bloom, halo, exposure, density, temp)
 
     private fun apply(l: Look) {
-        dilate.target = l.dilate; flowSpeed.target = l.flowSpeed; flowAmt.target = l.flowAmt
+        dilate.target = l.dilate; energy.target = l.energy
         twinkle.target = l.twinkle; sweep.target = l.sweep; gain.target = l.gain
         coreGain.target = l.coreGain; alert.target = l.alert; bloom.target = l.bloom
         halo.target = l.halo; exposure.target = l.exposure

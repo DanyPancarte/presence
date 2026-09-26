@@ -13,4 +13,4 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "presence"
-include(":app", ":sphere", ":sphere-preview")
+include(":app")
