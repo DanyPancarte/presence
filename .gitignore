@@ -1,0 +1,11 @@
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+.DS_Store
+/captures/
+.kotlin/
+tools/preview/node_modules/
+tools/preview/data/
+tools/preview/out/
