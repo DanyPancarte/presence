@@ -5,6 +5,12 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.result.contract.ActivityResultContracts
 import com.dany.presence.audio.AudioReactor
+import com.dany.presence.brain.Conversation
+import com.dany.presence.voice.Speech
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.core.tween
@@ -46,15 +52,19 @@ import com.dany.presence.render.Organism
 import kotlin.math.abs
 
 /**
- * Zero chrome: the sphere is the interface. Étape 2 (validation du rendu) — gestes de test :
- *  - tap           → cycle des états (VEILLE → ÉCOUTE → RÉFLEXION → RÉPONSE → ALERTE)
- *  - swipe horizontal → comportement de l'organisme (A/B/C)
+ * Zero chrome: the sphere is the interface.
+ *  - tap              → parle-lui (ÉCOUTE → RÉFLEXION → RÉPONSE) ; re-tap = annule
+ *  - appui long       → réglage caché (clé API Gemini)
+ *  - swipe horizontal → comportement de l'organisme (validation du rendu)
  * Le swipe vertical est réservé aux modules (étape 5).
  */
 class MainActivity : ComponentActivity() {
     private val sphereState = SphereState()
     private lateinit var sphereView: SphereView
     private lateinit var audio: AudioReactor
+    private lateinit var speech: Speech
+    private lateinit var convo: Conversation
+    private val lineState = mutableStateOf("")
     private val micPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
         if (ok) audio.start()
     }
@@ -68,9 +78,13 @@ class MainActivity : ComponentActivity() {
         }
         sphereView = SphereView(this, sphereState)
         audio = AudioReactor(sphereState) { sphereView.renderer.clock }
+        speech = Speech(this)
+        convo = Conversation(this, sphereState, speech) { lineState.value = it }
+        convo.onListening = { listening -> if (listening) audio.stop() else if (hasMic()) audio.start() }
 
         setContent {
-            var line by remember { mutableStateOf("") }
+            var line by lineState
+            var showSettings by remember { mutableStateOf(false) }
             var styleIdx by remember { mutableStateOf(0) }
             Box(
                 Modifier
@@ -88,11 +102,10 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     .pointerInput(Unit) {
-                        detectTapGestures(onTap = {
-                            val next = Mood.entries[(sphereState.mood.ordinal + 1) % Mood.entries.size]
-                            sphereState.mood = next
-                            line = next.name
-                        })
+                        detectTapGestures(
+                            onTap = { convo.toggle() },
+                            onLongPress = { showSettings = true },
+                        )
                     }
                     .pointerInput(Unit) {
                         var dx = 0f
@@ -113,6 +126,11 @@ class MainActivity : ComponentActivity() {
             ) {
                 AndroidView(factory = { sphereView }, modifier = Modifier.fillMaxSize())
                 BottomLine(line, Modifier.align(Alignment.BottomCenter))
+                if (showSettings) SettingsDialog(
+                    key = convo.gemini.apiKey, model = convo.gemini.model,
+                    onSave = { k, m -> convo.gemini.apiKey = k; convo.gemini.model = m; showSettings = false },
+                    onDismiss = { showSettings = false },
+                )
             }
         }
     }
@@ -124,7 +142,12 @@ class MainActivity : ComponentActivity() {
         else micPermission.launch(Manifest.permission.RECORD_AUDIO)
     }
 
+    private fun hasMic() = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+
+    override fun onDestroy() { speech.release(); super.onDestroy() }
+
     override fun onPause() {
+        convo.cancel()
         audio.stop()
         sphereView.onPause()
         super.onPause()
@@ -156,4 +179,23 @@ fun BottomLine(text: String, modifier: Modifier = Modifier) {
             modifier = Modifier.fillMaxWidth(),
         )
     }
+}
+
+/** Hidden settings (long press): the Gemini key never leaves the phone. */
+@Composable
+fun SettingsDialog(key: String, model: String, onSave: (String, String) -> Unit, onDismiss: () -> Unit) {
+    var k by remember { mutableStateOf(key) }
+    var m by remember { mutableStateOf(model) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = { onSave(k, m) }) { Text("Garder") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } },
+        title = { Text("Cerveau") },
+        text = {
+            androidx.compose.foundation.layout.Column {
+                OutlinedTextField(value = k, onValueChange = { k = it }, label = { Text("Clé API Gemini") }, singleLine = true)
+                OutlinedTextField(value = m, onValueChange = { m = it }, label = { Text("Modèle") }, singleLine = true)
+            }
+        },
+    )
 }

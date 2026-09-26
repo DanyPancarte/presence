@@ -9,7 +9,8 @@ Assistant vocal perso, Android natif (Kotlin + Compose + OpenGL ES 3.0). La sph�
 | 1. Squelette Gradle, permissions, immersive | ✅ |
 | 2. Rendu : organisme de particules (Tentacules) | ⏳ en validation |
 | 3. Réactivité micro (volume, ton, hauteur, transitoires) | ✅ dans l'APK |
-| 4–6. Cerveau, modules, rituel | à venir |
+| 4. Cerveau : STT → Gemini (JSON) → TTS fr-CA, réglage caché | ✅ dans l'APK |
+| 5–6. Modules (Room), rituel | à venir |
 
 ## Build
 
@@ -20,7 +21,9 @@ echo "sdk.dir=$ANDROID_HOME" > local.properties
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Gestes de test (temporaires) : **tap** = cycle des états, **swipe horizontal** = comportement de l'organisme.
+Gestes : **tap** = parle-lui (re-tap = annule), **appui long** = clé API Gemini, **swipe horizontal** = comportement de l'organisme (validation).
+
+Clé Gemini : `gemini.api.key=...` dans `local.properties` (jamais commité) ou via l'appui long.
 
 ## Architecture du rendu
 
