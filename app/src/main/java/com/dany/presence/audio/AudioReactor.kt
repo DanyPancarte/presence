@@ -4,7 +4,7 @@ import android.annotation.SuppressLint
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
-import com.dany.presence.render.SphereState
+import com.dany.presence.render.HoloState
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
@@ -16,13 +16,12 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * Microphone → the organism. 16 kHz mono, 1024-sample windows (~64 ms), FFT + time-domain pitch.
+ * Microphone → the hologram. 16 kHz mono, 1024-sample windows (~64 ms), FFT.
  * Everything is smoothed with attack/release envelopes so silence is a slow exhale, never a cut.
  *
- * Writes into [SphereState]: amp, bands, tone (spectral centroid), pitch (relative to the speaker's
- * running median), and transient shocks.
+ * Writes into [HoloState]: amp, 24 log-spaced bands (the radio EQ), transient pulses.
  */
-class AudioReactor(private val state: SphereState, private val clock: () -> Float) {
+class AudioReactor(private val state: HoloState) {
     private val rate = 16_000
     private val n = 1024
     private var thread: Thread? = null
@@ -36,11 +35,8 @@ class AudioReactor(private val state: SphereState, private val clock: () -> Floa
 
     private var amp = 0f
     private var noiseFloor = 0.01f
-    private val bands = FloatArray(4)
-    private var tone = 0f
-    private var pitch = 0f
-    private var pitchMedian = 160f
-    private var lastShock = -10f
+    private val bands = FloatArray(24)
+    private val edges = FloatArray(25) { i -> 80f * Math.pow(7000.0 / 80.0, i / 24.0).toFloat() }
 
     @SuppressLint("MissingPermission")
     fun start() {
@@ -78,73 +74,30 @@ class AudioReactor(private val state: SphereState, private val clock: () -> Floa
         for (i in 0 until n) { re[i] = x[i] * window[i]; im[i] = 0f }
         fft(re, im)
         var flux = 0f
-        var centNum = 0f
-        var centDen = 0f
         for (i in 1 until n / 2) {
             val m = sqrt(re[i] * re[i] + im[i] * im[i])
             mag[i] = m
             val d = m - prevMag[i]
             if (d > 0) flux += d
             prevMag[i] = m
-            val f = i * rate / n.toFloat()
-            if (f in 80f..6000f) { centNum += f * m; centDen += m }
         }
-        // 4 bands: bass 80–250, low-mid 250–800, presence 800–2500, air 2500–7000 Hz.
-        val edges = floatArrayOf(80f, 250f, 800f, 2500f, 7000f)
-        for (b in 0 until 4) {
+        // 24 log-spaced bands 80 Hz → 7 kHz (the radio EQ).
+        for (b in 0 until 24) {
             var e = 0f; var c = 0
-            val i0 = (edges[b] * n / rate).toInt(); val i1 = min((edges[b + 1] * n / rate).toInt(), n / 2 - 1)
+            val i0 = (edges[b] * n / rate).toInt(); val i1 = max(i0, min((edges[b + 1] * n / rate).toInt(), n / 2 - 1))
             for (i in i0..i1) { e += mag[i]; c++ }
             val v = (ln(1f + e / max(c, 1) * 40f) / 3f * amp).coerceIn(0f, 1f)
-            bands[b] = if (v > bands[b]) bands[b] + (v - bands[b]) * 0.5f else bands[b] + (v - bands[b]) * 0.08f
+            bands[b] = if (v > bands[b]) bands[b] + (v - bands[b]) * 0.5f else bands[b] + (v - bands[b]) * 0.1f
         }
-        // Tone = spectral centroid on a log scale: 300 Hz → 0, 3000 Hz → 1.
-        val cent = if (centDen > 1e-4f) centNum / centDen else 800f
-        val toneTarget = ((ln(cent / 300f) / ln(10f))).coerceIn(0f, 1f)
-        tone += (toneTarget - tone) * (if (amp > 0.15f) 0.2f else 0.03f)
-
-        // --- transients: spectral flux over a running average ---
-        val nowT = clock()
+        // Transients: spectral flux over a running average → a short glitch pulse.
         fluxAvg = fluxAvg * 0.9f + flux * 0.1f
-        if (flux > fluxAvg * 2.2f + 0.5f && amp > 0.2f && nowT - lastShock > 0.18f) {
-            lastShock = nowT
-            state.shockStart = nowT
-            state.shockStrength = (flux / (fluxAvg + 1f)).coerceIn(0.3f, 1f)
-        }
-
-        // --- pitch: normalised autocorrelation, 70–500 Hz ---
-        if (amp > 0.2f) {
-            val p = autocorrPitch(x)
-            if (p > 0f) {
-                pitchMedian += (p - pitchMedian) * 0.01f
-                val rel = (ln(p / pitchMedian) / ln(2f)).coerceIn(-1f, 1f) // ±1 octave
-                pitch += (rel - pitch) * 0.3f
-            }
-        } else pitch *= 0.97f
+        if (flux > fluxAvg * 2.2f + 0.5f && amp > 0.2f) state.pulse = (flux / (fluxAvg + 1f)).coerceIn(0.3f, 1f)
 
         state.amp = amp.coerceIn(0f, 1f)
         state.bands = bands.copyOf()
-        state.tone = tone
-        state.pitch = pitch
     }
 
     private var fluxAvg = 0f
-
-    private fun autocorrPitch(x: FloatArray): Float {
-        val minLag = rate / 500; val maxLag = rate / 70
-        var best = 0f; var bestLag = 0
-        var e0 = 0f
-        for (i in 0 until n - maxLag) e0 += x[i] * x[i]
-        if (e0 < 1e-6f) return 0f
-        for (lag in minLag..maxLag) {
-            var c = 0f; var e1 = 0f
-            var i = 0
-            while (i < n - maxLag) { c += x[i] * x[i + lag]; e1 += x[i + lag] * x[i + lag]; i += 2 }
-            val r = c / sqrt(e0 * e1 + 1e-9f)
-            if (r > best) { best = r; bestLag = lag }
-        }
-        return if (best > 0.6f && bestLag > 0) rate / bestLag.toFloat() else 0f
-    }
 
     /** In-place iterative radix-2 FFT. */
     private fun fft(re: FloatArray, im: FloatArray) {
@@ -177,7 +130,4 @@ class AudioReactor(private val state: SphereState, private val clock: () -> Floa
             len = len shl 1
         }
     }
-
-    @Suppress("unused")
-    private fun soft(x: Float) = 1f - exp(-abs(x))
 }

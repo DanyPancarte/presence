@@ -9,11 +9,13 @@ import android.hardware.SensorManager
 import android.opengl.GLSurfaceView
 
 @SuppressLint("ViewConstructor")
-class SphereView(context: Context, val state: SphereState) : GLSurfaceView(context), SensorEventListener {
-    val renderer = OrganismRenderer(context, state)
+class HoloView(context: Context, val state: HoloState) : GLSurfaceView(context), SensorEventListener {
+    val renderer = HoloRenderer(context, state)
     private val sensors = context.getSystemService(SensorManager::class.java)
     private var baseX = Float.NaN
     private var baseY = Float.NaN
+    private val rot = FloatArray(9)
+    private val ori = FloatArray(3)
 
     init {
         setEGLContextClientVersion(3)
@@ -25,12 +27,7 @@ class SphereView(context: Context, val state: SphereState) : GLSurfaceView(conte
 
     override fun onResume() {
         super.onResume()
-        sensors.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR)?.let {
-            sensors.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
-        }
-        sensors.getDefaultSensor(Sensor.TYPE_GYROSCOPE)?.let {
-            sensors.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
-        }
+        sensors.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR)?.let { sensors.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) }
     }
 
     override fun onPause() {
@@ -38,17 +35,7 @@ class SphereView(context: Context, val state: SphereState) : GLSurfaceView(conte
         super.onPause()
     }
 
-    private val rot = FloatArray(9)
-    private val ori = FloatArray(3)
-
     override fun onSensorChanged(e: SensorEvent) {
-        if (e.sensor.type == Sensor.TYPE_GYROSCOPE) {
-            // Angular speed (rad/s) → agitation: a flick of the wrist shakes the organism.
-            val w = kotlin.math.sqrt(e.values[0] * e.values[0] + e.values[1] * e.values[1] + e.values[2] * e.values[2])
-            val m = ((w - 0.6f) / 5f).coerceIn(0f, 1f)
-            if (m > state.motion) state.motion = m
-            return
-        }
         SensorManager.getRotationMatrixFromVector(rot, e.values)
         SensorManager.getOrientation(rot, ori)
         val pitch = ori[1]; val roll = ori[2]
@@ -56,11 +43,8 @@ class SphereView(context: Context, val state: SphereState) : GLSurfaceView(conte
         // Slowly re-centre so the parallax follows the hand, not the absolute pose.
         baseX += (roll - baseX) * 0.01f
         baseY += (pitch - baseY) * 0.01f
-        val k = 0.35f
-        val tx = ((roll - baseX) * k).coerceIn(-0.12f, 0.12f)
-        val ty = ((pitch - baseY) * k).coerceIn(-0.12f, 0.12f)
-        state.parallaxX += (tx - state.parallaxX) * 0.15f
-        state.parallaxY += (ty - state.parallaxY) * 0.15f
+        state.parallaxTX = ((roll - baseX) * 1.4f).coerceIn(-0.5f, 0.5f)
+        state.parallaxTY = ((pitch - baseY) * 1.4f).coerceIn(-0.5f, 0.5f)
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit

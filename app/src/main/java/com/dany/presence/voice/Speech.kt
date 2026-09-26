@@ -20,6 +20,8 @@ class Speech(private val context: Context) {
 
     /** Live RMS from the recognizer (dB-ish, -2..10), drives the organism while it listens. */
     var onLevel: (Float) -> Unit = {}
+    /** Live partial transcript while listening. */
+    var onPartial: (String) -> Unit = {}
 
     init {
         tts = TextToSpeech(context) { status ->
@@ -61,7 +63,9 @@ class Speech(private val context: Context) {
                 val best = list?.firstOrNull()?.trim().orEmpty()
                 if (best.isEmpty()) onError("") else onResult(best)
             }
-            override fun onPartialResults(partialResults: Bundle?) = Unit
+            override fun onPartialResults(partialResults: Bundle?) {
+                partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.let { if (it.isNotBlank()) onPartial(it) }
+            }
             override fun onEvent(eventType: Int, params: Bundle?) = Unit
         })
         r.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -69,6 +73,7 @@ class Speech(private val context: Context) {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "fr-CA")
             putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
         })
     }

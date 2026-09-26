@@ -1,72 +1,64 @@
 package com.dany.presence
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
-import androidx.activity.result.contract.ActivityResultContracts
-import com.dany.presence.audio.AudioReactor
-import com.dany.presence.brain.Conversation
-import com.dany.presence.voice.Speech
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import com.dany.presence.render.Mood
-import com.dany.presence.render.SphereState
-import com.dany.presence.render.SphereView
-import com.dany.presence.render.Organism
+import com.dany.presence.audio.AudioReactor
+import com.dany.presence.brain.Conversation
+import com.dany.presence.brain.Scene
+import com.dany.presence.data.Module
+import com.dany.presence.data.Modules
+import com.dany.presence.render.HoloState
+import com.dany.presence.render.HoloView
+import com.dany.presence.ritual.Ritual
+import com.dany.presence.ui.Overlays
+import com.dany.presence.voice.Speech
 import kotlin.math.abs
 
 /**
- * Zero chrome: the sphere is the interface.
+ * Zero chrome: the hologram is the interface.
  *  - tap              → parle-lui (ÉCOUTE → RÉFLEXION → RÉPONSE) ; re-tap = annule
+ *  - swipe vertical   → aperçu du module suivant / précédent
+ *  - doigt posé       → repousse les particules
  *  - appui long       → réglage caché (clé API Gemini)
- *  - swipe horizontal → comportement de l'organisme (validation du rendu)
- * Le swipe vertical est réservé aux modules (étape 5).
  */
 class MainActivity : ComponentActivity() {
-    private val sphereState = SphereState()
-    private lateinit var sphereView: SphereView
+    private val holo = HoloState()
+    private lateinit var view: HoloView
     private lateinit var audio: AudioReactor
     private lateinit var speech: Speech
+    private lateinit var modules: Modules
     private lateinit var convo: Conversation
-    private val lineState = mutableStateOf("")
-    private val micPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
-        if (ok) audio.start()
+    private val sceneState = mutableStateOf(Scene())
+    private var pendingMode: String? = null
+
+    private val perms = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { r ->
+        if (r[Manifest.permission.RECORD_AUDIO] == true) { audio.start(); pendingMode?.let { m -> pendingMode = null; convo.listen(Ritual.greeting(m)) } }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -76,56 +68,55 @@ class MainActivity : ComponentActivity() {
             hide(WindowInsetsCompat.Type.systemBars())
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
-        sphereView = SphereView(this, sphereState)
-        audio = AudioReactor(sphereState) { sphereView.renderer.clock }
+        setShowWhenLocked(true)
+        setTurnScreenOn(true)
+
+        view = HoloView(this, holo)
+        audio = AudioReactor(holo)
         speech = Speech(this)
-        convo = Conversation(this, sphereState, speech) { lineState.value = it }
+        modules = Modules(this)
+        convo = Conversation(this, holo, speech, modules) { sceneState.value = it }
         convo.onListening = { listening -> if (listening) audio.stop() else if (hasMic()) audio.start() }
+        Ritual.scheduleAll(this)
+        pendingMode = intent?.getStringExtra(Ritual.EXTRA_MODE)
 
         setContent {
-            var line by lineState
+            val scene by sceneState
             var showSettings by remember { mutableStateOf(false) }
-            var styleIdx by remember { mutableStateOf(0) }
+            var moduleIdx by remember { mutableStateOf(0) }
             Box(
                 Modifier
                     .fillMaxSize()
                     .pointerInput(Unit) {
-                        // Every finger on the glass pushes the organism, live.
                         awaitPointerEventScope {
                             while (true) {
                                 val ev = awaitPointerEvent()
                                 val p = ev.changes.firstOrNull() ?: continue
-                                if (ev.type == PointerEventType.Release) continue
-                                val (vx, vy) = sphereView.renderer.touchToView(p.position.x, p.position.y)
-                                sphereState.touchX = vx; sphereState.touchY = vy; sphereState.touch = 1f
+                                if (ev.type == PointerEventType.Release) { holo.touchX = 99f; holo.touchY = 99f; continue }
+                                val (bx, by) = view.renderer.touchToBox(p.position.x, p.position.y)
+                                holo.touchX = bx; holo.touchY = by
                             }
                         }
                     }
                     .pointerInput(Unit) {
-                        detectTapGestures(
-                            onTap = { convo.toggle() },
-                            onLongPress = { showSettings = true },
-                        )
+                        detectTapGestures(onTap = { convo.toggle() }, onLongPress = { showSettings = true })
                     }
                     .pointerInput(Unit) {
-                        var dx = 0f
-                        var dy = 0f
+                        var dy = 0f; var dx = 0f
                         detectDragGestures(
                             onDragStart = { dx = 0f; dy = 0f },
                             onDragEnd = {
-                                if (abs(dx) > abs(dy) && abs(dx) > 120f) {
-                                    val n = Organism.entries.size
-                                    styleIdx = (styleIdx + (if (dx < 0) 1 else n - 1)) % n
-                                    val o = Organism.entries[styleIdx]
-                                    sphereView.renderer.preset = o
-                                    line = o.label
+                                if (abs(dy) > abs(dx) && abs(dy) > 140f) {
+                                    val mods = Module.entries.filter { it != Module.AUCUN }
+                                    moduleIdx = (moduleIdx + (if (dy < 0) 1 else mods.size - 1)) % mods.size
+                                    convo.peek(mods[moduleIdx])
                                 }
                             },
-                        ) { _, drag -> dx += drag.x; dy += drag.y }
+                        ) { _, d -> dx += d.x; dy += d.y }
                     },
             ) {
-                AndroidView(factory = { sphereView }, modifier = Modifier.fillMaxSize())
-                BottomLine(line, Modifier.align(Alignment.BottomCenter))
+                AndroidView(factory = { view }, modifier = Modifier.fillMaxSize())
+                Overlays(scene, holo, modules.dao, Modifier.fillMaxSize())
                 if (showSettings) SettingsDialog(
                     key = convo.gemini.apiKey, model = convo.gemini.model,
                     onSave = { k, m -> convo.gemini.apiKey = k; convo.gemini.model = m; showSettings = false },
@@ -135,50 +126,32 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-        sphereView.onResume()
-        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) audio.start()
-        else micPermission.launch(Manifest.permission.RECORD_AUDIO)
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        intent.getStringExtra(Ritual.EXTRA_MODE)?.let { m -> if (hasMic()) convo.listen(Ritual.greeting(m)) else pendingMode = m }
     }
 
     private fun hasMic() = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
-    override fun onDestroy() { speech.release(); super.onDestroy() }
+    override fun onResume() {
+        super.onResume()
+        view.onResume()
+        val missing = listOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.POST_NOTIFICATIONS, Manifest.permission.BLUETOOTH_CONNECT)
+            .filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
+        if (missing.isEmpty()) {
+            audio.start()
+            pendingMode?.let { m -> pendingMode = null; convo.listen(Ritual.greeting(m)) }
+        } else perms.launch(missing.toTypedArray())
+    }
 
     override fun onPause() {
         convo.cancel()
         audio.stop()
-        sphereView.onPause()
+        view.onPause()
         super.onPause()
     }
-}
 
-private val Amber = Color(0xFFFFD9A0)
-
-@androidx.compose.runtime.Composable
-fun BottomLine(text: String, modifier: Modifier = Modifier) {
-    AnimatedContent(
-        targetState = text,
-        transitionSpec = { fadeIn(tween(700)) togetherWith fadeOut(tween(500)) },
-        modifier = modifier.fillMaxWidth().padding(start = 28.dp, end = 28.dp, bottom = 56.dp),
-        label = "line",
-    ) { t ->
-        Text(
-            t,
-            color = Amber.copy(alpha = 0.85f),
-            style = TextStyle(
-                fontFamily = FontFamily.SansSerif,
-                fontWeight = FontWeight.Light,
-                fontSize = 17.sp,
-                letterSpacing = 1.2.sp,
-            ),
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth(),
-        )
-    }
+    override fun onDestroy() { speech.release(); super.onDestroy() }
 }
 
 /** Hidden settings (long press): the Gemini key never leaves the phone. */
@@ -192,7 +165,7 @@ fun SettingsDialog(key: String, model: String, onSave: (String, String) -> Unit,
         dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } },
         title = { Text("Cerveau") },
         text = {
-            androidx.compose.foundation.layout.Column {
+            Column {
                 OutlinedTextField(value = k, onValueChange = { k = it }, label = { Text("Clé API Gemini") }, singleLine = true)
                 OutlinedTextField(value = m, onValueChange = { m = it }, label = { Text("Modèle") }, singleLine = true)
             }
