@@ -78,6 +78,14 @@ class SphereState {
     @Volatile var bands = FloatArray(4)
     @Volatile var shockStart = -10f
     @Volatile var shockStrength = 0f
+    @Volatile var tone = 0f        // voice brightness 0..1
+    @Volatile var pitch = 0f       // voice pitch, ±1 octave around the speaker's median
+
+    // Phone agitation (gyro) and touch (view space xy + strength), both decay on their own
+    @Volatile var motion = 0f
+    @Volatile var touchX = 0f
+    @Volatile var touchY = 0f
+    @Volatile var touch = 0f
 
     /** Module zones: 4 floats per zone (dir xyz, cos radius) + 4 params (brightness, blink, cos hole, -). */
     @Volatile var zones = FloatArray(0)
@@ -96,5 +104,9 @@ class SphereState {
         halo.target = l.halo; exposure.target = l.exposure
     }
 
-    fun step(dt: Float) = all.forEach { it.step(dt) }
+    fun step(dt: Float) {
+        all.forEach { it.step(dt) }
+        motion *= exp(-dt * 2.5f)
+        touch *= exp(-dt * 3f)
+    }
 }

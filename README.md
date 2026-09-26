@@ -7,8 +7,9 @@ Assistant vocal perso, Android natif (Kotlin + Compose + OpenGL ES 3.0). La sph�
 | Étape | Statut |
 |---|---|
 | 1. Squelette Gradle, permissions, immersive | ✅ |
-| 2. Rendu : organisme de particules (3 comportements) | ⏳ en validation |
-| 3–6. Micro, cerveau, modules, rituel | à venir |
+| 2. Rendu : organisme de particules (Tentacules) | ⏳ en validation |
+| 3. Réactivité micro (volume, ton, hauteur, transitoires) | ✅ dans l'APK |
+| 4–6. Cerveau, modules, rituel | à venir |
 
 ## Build
 

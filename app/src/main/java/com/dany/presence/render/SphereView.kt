@@ -28,6 +28,9 @@ class SphereView(context: Context, val state: SphereState) : GLSurfaceView(conte
         sensors.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR)?.let {
             sensors.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
         }
+        sensors.getDefaultSensor(Sensor.TYPE_GYROSCOPE)?.let {
+            sensors.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
+        }
     }
 
     override fun onPause() {
@@ -39,6 +42,13 @@ class SphereView(context: Context, val state: SphereState) : GLSurfaceView(conte
     private val ori = FloatArray(3)
 
     override fun onSensorChanged(e: SensorEvent) {
+        if (e.sensor.type == Sensor.TYPE_GYROSCOPE) {
+            // Angular speed (rad/s) → agitation: a flick of the wrist shakes the organism.
+            val w = kotlin.math.sqrt(e.values[0] * e.values[0] + e.values[1] * e.values[1] + e.values[2] * e.values[2])
+            val m = ((w - 0.6f) / 5f).coerceIn(0f, 1f)
+            if (m > state.motion) state.motion = m
+            return
+        }
         SensorManager.getRotationMatrixFromVector(rot, e.values)
         SensorManager.getOrientation(rot, ori)
         val pitch = ori[1]; val roll = ori[2]

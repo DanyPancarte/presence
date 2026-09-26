@@ -182,6 +182,13 @@ class Organism {
     gl.uniform2f(S.u.uShock, (p.shock || [0, 0])[0], (p.shock || [0, 0])[1]);
     gl.uniform1f(S.u.uAmp, p.amp || 0);
     gl.uniform1f(S.u.uCoreR, 0.045);
+    gl.uniform1f(S.u.uTone, p.tone || 0);
+    gl.uniform1f(S.u.uPitch, p.pitch || 0);
+    gl.uniform1f(S.u.uMotion, p.motion || 0);
+    // Touch arrives in view space; the sim lives in model space.
+    const tv = p.touch || [0, 0, 0];
+    const m = this.model || rotY(0);
+    gl.uniform4f(S.u.uTouch, m[0] * tv[0] + m[1] * tv[1] + m[2] * 0.85, m[3] * tv[0] + m[4] * tv[1] + m[5] * 0.85, m[6] * tv[0] + m[7] * tv[1] + m[8] * 0.85, tv[2]);
     const src = this.cur, dst = 1 - src;
     gl.bindVertexArray(this.simVao[src]);
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
@@ -219,6 +226,7 @@ class Organism {
     const par = p.parallax || [0, 0];
     const view = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -par[0], -par[1] + p.lift, -dist, 1]);
     const model = mat3Mul(rotX(0.25 + drift(t, 0.53) * 0.1), rotY(t * 0.03));
+    this.model = model;
 
     // ---- scene: fade previous frame (trails), then add streaks ----
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.scene.fbo);
@@ -257,6 +265,7 @@ class Organism {
     gl.uniform3f(F.u.uSweepAxis, 0.3, 0.9, 0.3);
     gl.uniform4fv(F.u.uBands, p.bands || [0, 0, 0, 0]);
     gl.uniform2f(F.u.uShock, (p.shock || [0, 0])[0], (p.shock || [0, 0])[1]);
+    gl.uniform1f(F.u.uTone, p.tone || 0);
     const zones = p.zones || [];
     gl.uniform1i(F.u.uZoneCount, zones.length);
     if (zones.length) {
@@ -331,12 +340,12 @@ class Organism {
 
 // Organism presets (swipe) and default VEILLE look. Keep in sync with Organism.kt.
 const PRESETS = {
-  vortex:     { label: 'A · Vortex',     attract: [0.42, 0.30, 0.38], curl: 0.55, curlScale: 1.6, swirl: 0.55, streams: 0.35 },
-  essaim:     { label: 'B · Essaim',     attract: [0.30, 0.30, 0.30], curl: 1.25, curlScale: 2.2, swirl: 0.12, streams: 0.15 },
-  tentacules: { label: 'C · Tentacules', attract: [0.55, 0.16, 0.34], curl: 0.8,  curlScale: 1.3, swirl: 0.3,  streams: 0.8 },
+  tentacules: { label: 'Tentacules', attract: [0.5, 0.14, 0.32], curl: 0.85, curlScale: 1.3, swirl: 0.32, streams: 0.85 },
+  vortex:     { label: 'Vortex',     attract: [0.42, 0.30, 0.38], curl: 0.55, curlScale: 1.6, swirl: 0.55, streams: 0.35 },
+  essaim:     { label: 'Essaim',     attract: [0.30, 0.30, 0.30], curl: 1.25, curlScale: 2.2, swirl: 0.12, streams: 0.15 },
 };
 const DEFAULTS = {
-  fill: 0.86, lift: 0.0, focus: 0.75, coc: 6.0, bodyDensity: 1.3,
+  fill: 1.0, lift: 0.0, focus: 0.75, coc: 6.0, bodyDensity: 1.3,
   dilate: 0.0, energy: 1.0, twinkle: 1.0, sweep: 0.0,
   gain: 0.4, coreGain: 1.0, alert: 0.0, density: 1.0, temp: 0.0,
   threshold: 0.9, bloom: 0.9, bloomSpread: 0.85, exposure: 1.0, halo: 1.0,

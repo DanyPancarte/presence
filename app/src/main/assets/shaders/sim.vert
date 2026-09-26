@@ -27,6 +27,10 @@ uniform float uStreams;     // share of births at the wandering sources
 uniform vec2 uShock;        // front radius, strength
 uniform float uAmp;         // voice amplitude: the organism inhales / expands
 uniform float uCoreR;       // absorption radius
+uniform float uTone;        // voice brightness 0..1 (spectral centroid): sharp voice = fine, nervous turbulence
+uniform float uPitch;       // voice pitch -1..1 around the speaker's median: tilts the vortex
+uniform float uMotion;      // phone agitation 0..1 (gyroscope): shakes the organism
+uniform vec4 uTouch;        // xyz touch point in model space, w strength: local repulsion
 
 vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
 vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
@@ -87,7 +91,7 @@ vec3 grad(vec3 p) {
 }
 
 vec3 flow(vec3 p, float t) {
-    vec3 q = p * uCurlScale;
+    vec3 q = p * uCurlScale * (1.0 + 0.5 * uTone);
     vec3 g1 = grad(q + vec3(0.0, t * uCurlSpeed, 0.0));
     vec3 g2 = grad(q * 0.7 + vec3(19.1, -t * uCurlSpeed * 0.8, 7.7));
     return cross(g1, g2) * 0.18;
@@ -95,6 +99,7 @@ vec3 flow(vec3 p, float t) {
 
 // Wandering birth spots: directions drifting on slow, incommensurate orbits.
 vec3 source(float k, float t) {
+    t *= 1.0 + 2.5 * uAmp;
     float a = t * (0.041 + 0.013 * k) + k * 2.399;
     float b = t * (0.029 + 0.007 * k) + k * 1.618;
     return normalize(vec3(cos(a) * cos(b * 1.3), sin(b) * 0.9 + 0.2 * sin(a * 0.7), sin(a) * cos(b)));
@@ -121,9 +126,13 @@ void main() {
             float k = floor(hash(seed * 7.7 + uFrame * 0.23) * 6.0);
             dir = normalize(source(k, t) + dir * 0.16);
         }
-        float rr = uShellR * (0.9 + 0.12 * hash(seed + t));
+        float rr = uShellR * (0.86 + 0.16 * hash(seed + t));
+        // Tentacles: births at the sources get flung outward (and sideways with the voice) before
+        // the pull wins them back, so the organism keeps reaching out of its shell.
+        float burst = hash(seed * 5.3 + t) * (0.5 + 0.5 * uAmp + 0.5 * uMotion);
+        vec3 side = normalize(cross(dir, uSwirlAxis) + 1e-4) * uPitch * 0.4;
         oPos = vec4(dir * rr, 0.0);
-        oVel = vec4(0.0, 0.0, 0.0, seed);
+        oVel = vec4((dir + side) * burst, seed);
         return;
     }
 
@@ -135,18 +144,25 @@ void main() {
     pull *= 1.0 - clamp(uAmp, 0.0, 1.0) * 0.8;
 
     // Vortex around a precessing axis, faster near the core.
-    vec3 swirl = cross(uSwirlAxis, p) * uSwirl / (r + 0.18);
+    vec3 axis = normalize(uSwirlAxis + vec3(uPitch * 0.9, 0.0, -uPitch * 0.5));
+    vec3 swirl = cross(axis, p) * uSwirl * (1.0 + 0.6 * abs(uPitch)) / (r + 0.18);
 
     // Turbulence, fading near the core so the centre stays a dense knot.
     vec3 turb = flow(p, t) * uCurl * (0.35 + 0.65 * smoothstep(0.05, 0.5, r));
 
-    // Soft shell: never leave the sphere.
-    vec3 shell = -dir * (max(r - uShellR * 0.94, 0.0) * 10.0 + max(r - uShellR, 0.0) * 30.0);
+    // Soft shell: tentacles may reach ~40% beyond the sphere, then get pulled home.
+    float reach = uShellR * (1.0 + 0.12 * uAmp + 0.12 * uMotion);
+    vec3 shell = -dir * (max(r - reach, 0.0) * 4.0 + max(r - reach * 1.35, 0.0) * 40.0);
+
+    // Phone agitation: random kicks. Touch: local push away from the finger.
+    vec3 jitter = (hash3(seed * 2.7 + uFrame * 0.31) - 0.5) * uMotion * 3.0;
+    vec3 away = p - uTouch.xyz;
+    vec3 touch = normalize(away + 1e-4) * uTouch.w * 2.5 * exp(-dot(away, away) * 6.0);
 
     // Shock wave: radial kick at the travelling front.
     vec3 shock = dir * uShock.y * exp(-pow((r - uShock.x) * 8.0, 2.0)) * 2.5;
 
-    vec3 target = pull + swirl + turb + shell + shock;
+    vec3 target = pull + swirl + turb + shell + shock + jitter + touch;
     float inertia = 1.0 - exp(-uDt * 4.0);
     v = mix(v, target, inertia);
     p += v * uDt;

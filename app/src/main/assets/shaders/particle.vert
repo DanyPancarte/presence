@@ -34,6 +34,7 @@ uniform float uSweepPos;
 uniform vec3 uSweepAxis;
 uniform vec4 uBands;
 uniform vec2 uShock;
+uniform float uTone;
 
 uniform int uZoneCount;
 uniform vec4 uZones[12];
@@ -114,7 +115,7 @@ void main() {
     // Voice bands light different latitudes; shock front flares.
     float lat = dm.y * 0.5 + 0.5;
     vec4 bandMask = vec4(core * 3.0, 1.0 - abs(lat - 0.5) * 2.0, smoothstep(0.55, 1.0, lat), smoothstep(0.45, 0.0, lat));
-    I *= 1.0 + dot(uBands, bandMask) * 1.5;
+    I *= 1.0 + dot(uBands, bandMask) * 0.7;
     I *= 1.0 + uShock.y * 4.0 * exp(-pow((r - uShock.x) * 7.0, 2.0));
     // Mood density: fewer living particles.
     I *= 1.0 - smoothstep(uDensity * 1.08 - 0.08, uDensity * 1.08, hash(seed * 7.13));
@@ -134,10 +135,10 @@ void main() {
     I *= bodyTransmittance(v1.xyz);
     // Longer streaks spread the same light over more pixels.
     I *= 1.0 / (1.0 + len * 0.04);
-    I *= 1.0 - smoothstep(1.0, 1.12, r);
+    I *= 1.0 - smoothstep(1.25, 1.55, r);
     I *= uGain;
 
-    float heat = clamp(core * 1.6 + speed * 0.35 + 0.15 * hash(seed * 3.3), 0.0, 1.0);
+    float heat = clamp(core * 1.6 + speed * 0.35 + 0.15 * hash(seed * 3.3) + uTone * 0.35 - 0.1, 0.0, 1.0);
     vec3 col = palette(heat);
     col = mix(col, vec3(1.0, 0.09, 0.02), uAlert * 0.75);
     I *= 1.0 + uAlert * (0.5 + 0.5 * sin(uTime * 7.0 - r * 9.0)) * 2.5;

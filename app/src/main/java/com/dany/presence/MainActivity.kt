@@ -1,6 +1,10 @@
 package com.dany.presence
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Bundle
+import androidx.activity.result.contract.ActivityResultContracts
+import com.dany.presence.audio.AudioReactor
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.core.tween
@@ -9,6 +13,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -49,6 +54,10 @@ import kotlin.math.abs
 class MainActivity : ComponentActivity() {
     private val sphereState = SphereState()
     private lateinit var sphereView: SphereView
+    private lateinit var audio: AudioReactor
+    private val micPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        if (ok) audio.start()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -58,6 +67,7 @@ class MainActivity : ComponentActivity() {
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
         sphereView = SphereView(this, sphereState)
+        audio = AudioReactor(sphereState) { sphereView.renderer.clock }
 
         setContent {
             var line by remember { mutableStateOf("") }
@@ -65,6 +75,18 @@ class MainActivity : ComponentActivity() {
             Box(
                 Modifier
                     .fillMaxSize()
+                    .pointerInput(Unit) {
+                        // Every finger on the glass pushes the organism, live.
+                        awaitPointerEventScope {
+                            while (true) {
+                                val ev = awaitPointerEvent()
+                                val p = ev.changes.firstOrNull() ?: continue
+                                if (ev.type == PointerEventType.Release) continue
+                                val (vx, vy) = sphereView.renderer.touchToView(p.position.x, p.position.y)
+                                sphereState.touchX = vx; sphereState.touchY = vy; sphereState.touch = 1f
+                            }
+                        }
+                    }
                     .pointerInput(Unit) {
                         detectTapGestures(onTap = {
                             val next = Mood.entries[(sphereState.mood.ordinal + 1) % Mood.entries.size]
@@ -95,8 +117,18 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onResume() { super.onResume(); sphereView.onResume() }
-    override fun onPause() { sphereView.onPause(); super.onPause() }
+    override fun onResume() {
+        super.onResume()
+        sphereView.onResume()
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) audio.start()
+        else micPermission.launch(Manifest.permission.RECORD_AUDIO)
+    }
+
+    override fun onPause() {
+        audio.stop()
+        sphereView.onPause()
+        super.onPause()
+    }
 }
 
 private val Amber = Color(0xFFFFD9A0)

@@ -25,7 +25,7 @@ class OrganismRenderer(private val context: Context, val state: SphereState) : G
 
     var renderScale = 0.85f
     val particles = 150_000
-    @Volatile var preset = Organism.VORTEX
+    @Volatile var preset = Organism.TENTACULES
 
     private lateinit var pSim: GlProgram
     private lateinit var pPart: GlProgram
@@ -50,6 +50,7 @@ class OrganismRenderer(private val context: Context, val state: SphereState) : G
     private var frame = 0
     private var acc = 0f
     private var lastNs = 0L
+    private var model = rotY(0f)
 
     override fun onSurfaceCreated(unused: GL10?, config: EGLConfig?) {
         val a = context.assets
@@ -155,6 +156,13 @@ class OrganismRenderer(private val context: Context, val state: SphereState) : G
         glUniform2f(s.u("uShock"), since * 1.1f, st.shockStrength * (1f - since / 1.3f).coerceIn(0f, 1f))
         glUniform1f(s.u("uAmp"), st.amp)
         glUniform1f(s.u("uCoreR"), 0.045f)
+        glUniform1f(s.u("uTone"), st.tone)
+        glUniform1f(s.u("uPitch"), st.pitch)
+        glUniform1f(s.u("uMotion"), st.motion)
+        // Touch arrives in view space; the sim lives in model space (transpose = inverse rotation).
+        val m = model
+        val tx = st.touchX; val ty = st.touchY
+        glUniform4f(s.u("uTouch"), m[0] * tx + m[1] * ty + m[2] * 0.85f, m[3] * tx + m[4] * ty + m[5] * 0.85f, m[6] * tx + m[7] * ty + m[8] * 0.85f, st.touch)
         val src = cur; val dst = 1 - cur
         glBindVertexArray(simVao[src])
         glBindBuffer(GL_ARRAY_BUFFER, 0)
@@ -176,6 +184,18 @@ class OrganismRenderer(private val context: Context, val state: SphereState) : G
     /** Time of the simulation clock, used by the audio shock wave. */
     val clock get() = simTime
 
+    /** Screen px → view-space xy on the sphere's front plane, for touch repulsion. */
+    fun touchToView(xPx: Float, yPx: Float): Pair<Float, Float> {
+        val fovY = Math.toRadians(30.0).toFloat()
+        val aspect = outW.toFloat() / outH
+        val tanX = tan(fovY / 2) * aspect
+        val dist = sqrt(1f + (1f / (FILL * tanX)).let { it * it })
+        val ndcX = xPx / outW * 2 - 1
+        val ndcY = 1 - yPx / outH * 2
+        val z = dist - 0.85f
+        return (ndcX * tanX * z + state.parallaxX) to (ndcY * tan(fovY / 2) * z + state.parallaxY)
+    }
+
     private fun draw(dt: Float) {
         val scene = scene ?: return
         val W = scene.w; val H = scene.h
@@ -190,6 +210,7 @@ class OrganismRenderer(private val context: Context, val state: SphereState) : G
         val px = s.parallaxX; val py = s.parallaxY
         val view = floatArrayOf(1f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 1f, 0f, -px, -py, -dist, 1f)
         val model = mul3(rotX(0.25f + drift(t, 0.53f) * 0.1f), rotY(t * 0.03f))
+        this.model = model
 
         // ---- scene: fade previous frame (trails), then add streaks ----
         glBindFramebuffer(GL_FRAMEBUFFER, scene.fbo)
@@ -231,6 +252,7 @@ class OrganismRenderer(private val context: Context, val state: SphereState) : G
         glUniform4f(f.u("uBands"), b[0], b[1], b[2], b[3])
         val since = t - s.shockStart
         glUniform2f(f.u("uShock"), since * 1.1f, s.shockStrength * (1f - since / 1.3f).coerceIn(0f, 1f))
+        glUniform1f(f.u("uTone"), s.tone)
         val zones = s.zones
         val zc = min(zones.size / 4, 12)
         glUniform1i(f.u("uZoneCount"), zc)
@@ -306,7 +328,7 @@ class OrganismRenderer(private val context: Context, val state: SphereState) : G
     }
 
     companion object {
-        const val FILL = 0.86f
+        const val FILL = 1.0f
         const val BODY = 0.96f
         const val TRAIL = 0.9f
         const val LIFE = 9f
