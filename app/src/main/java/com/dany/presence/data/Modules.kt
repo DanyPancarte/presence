@@ -8,7 +8,7 @@ import java.util.Date
 import java.util.Locale
 
 /** Which overlay the hologram shows on top of itself. */
-enum class Module { AUCUN, TACHES, MOOD, NOTES, MEDS, BUDGET, AGENDA }
+typealias Module = com.dany.presence.core.Module
 
 /** Applies the agent's structured actions to the database and builds the context it reads back. */
 class Modules(context: Context) {
