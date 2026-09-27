@@ -75,11 +75,8 @@ class Agent(private val bus: Bus, val llm: Llm, private val modules: Modules) {
         val text = raw.trim()
         if (text.isEmpty()) return
         val det = Intent.detect(text)
-        if (!worthAnswering(text, det)) {
-            // Background chatter: heard, shown if the HUD wants to, sent nowhere. Sound should stay quiet on AUCUN.
-            bus.emit(Signal.Captured(Module.AUCUN, Intent.Op.IGNORE, text.take(40)))
-            return
-        }
+        // Background chatter: heard, sent nowhere, no trace on screen or in the sound.
+        if (!worthAnswering(text, det)) return
         bus.emit(Signal.Thinking(llm.modelName))
         remember("user", text)
         try {

@@ -3,16 +3,17 @@
 Assistant vocal perso, Android natif (Kotlin + Compose + OpenGL ES 3.0). Usage strictement perso.
 L'hologramme **est** l'interface : particules 3D plein écran, overlays contextuels style Cyberpunk 2077.
 
-## État
+## État — v2 « l'instrument »
 
-| Étape | Statut |
+| Système | Statut |
 |---|---|
-| 1. Squelette, permissions, plein écran immersif | ✅ |
-| 2. Rendu : hologramme de particules (5 formations, une par état) | ✅ |
-| 3. Micro : niveau, 24 bandes (EQ radio), transitoires → glitch | ✅ |
-| 4. Cerveau : STT fr-CA hors ligne → Gemini (JSON) → TTS fr-CA | ✅ |
-| 5. Modules Room : tâches 97 %, notes, mood, médicament, budget, agenda, questions ouvertes | ✅ |
-| 6. Rituel : relances 17h30 / 20h30 lun–ven, 10h dim, médicament 8h, plein écran | ✅ |
+| Scène cinéma (terrain topographique, disque, rubans, tilt-shift, bloom) pilotée par la voix et les données | ✅ |
+| Oreilles : micro toujours ouvert, reconnaissance fr-CA sur l'appareil, niveau en continu | ✅ |
+| Esprit : intention instantanée, Gemini 3.8 Flash (JSON dire + prosodie + actions), mémoire Room, initiative, rituel | ✅ |
+| Son : synthé natif, signatures par module, voix sans mots à prosodie | ✅ |
+| Shell : écran d'accueil (launcher), constellation des apps, notifications, HUD minimal | ✅ |
+
+Architecture : `ARCHITECTURE.md` (bus d'événements). Jumeau navigateur : `tools/preview/mockup.html`.
 
 ## Build de l'APK (ligne de commande)
 
@@ -47,18 +48,22 @@ Sans câble : envoyer l'APK sur le téléphone (Drive, mail), l'ouvrir, autorise
 | Au premier lancement (pop-up) | **Appareils à proximité** (Bluetooth) | Voix dans les écouteurs |
 | Paramètres → Apps → Présence → Notifications | **Notifications plein écran** (Android 14+) | Sinon la relance reste une bannière |
 | Paramètres → Apps → Présence → Batterie | **Sans restriction** | Les alarmes à 17h30 / 20h30 / 8h doivent réveiller le téléphone |
-| Dans l'app : **appui long 3 s** | **Clé API** : Gemini (aistudio.google.com/apikey, palier gratuit sans carte) ou Claude (console.anthropic.com, payant) | Le cerveau. Reste sur le téléphone. Modèle Gemini par défaut : `gemini-3.8-flash` ; si la clé ne peut pas l'appeler, l'app découvre toute seule le meilleur flash disponible. |
+| Dans l'app : **appui long** | **Accès aux notifications** (rangée dans les réglages) | Les notifications nourrissent la scène |
+| Dans l'app : **appui long** | **Clé API** : Gemini (aistudio.google.com/apikey, palier gratuit sans carte) ou Claude (console.anthropic.com, payant) | Le cerveau. Reste sur le téléphone. Modèle Gemini par défaut : `gemini-3.8-flash` ; si la clé ne peut pas l'appeler, l'app découvre toute seule le meilleur flash disponible. |
 
 Reconnaissance hors ligne : Paramètres → Système → Langues → Saisie vocale → ajouter **Français (Canada)** au pack hors ligne.
 
 ## Gestes
 
-- **Mains libres** : le micro est toujours ouvert quand l'app est à l'écran. Parler suffit : VEILLE → ÉCOUTE (dès la première syllabe) → RÉFLEXION → RÉPONSE, puis le micro se rouvre.
-  - Ce qui déclenche une réponse : son nom (« Présence »), un mot de module (tâche, note, budget, pilule, vendredi…), une question, ou une vraie phrase (≥ 5 mots). Un fragment de deux mots est ignoré (affiché « ignoré »). Pendant 25 s après une réponse, tout passe.
-- **Tap** : interrompt (voix ou analyse) et rouvre le micro.
-- **Swipe vertical** : aperçu du module suivant (Tâches → Mood → Notes → Méds → Budget → Agenda).
-- **Doigt posé / glissé** : repousse les particules.
-- **Appui long** : réglages cachés (clé et modèle Gemini).
+- **Mains libres** : le micro est ouvert tant que l'écran est allumé. Parler suffit. Ce qui déclenche une réponse : son nom (« Présence »), un mot de module, une question, une phrase de 5 mots et plus, ou les 25 s qui suivent une réponse (45 s après une question). Le reste est ignoré sans trace.
+- **Elle ne parle pas** : elle montre (la scène) et elle sonne (une voix sans mots : confirmation qui descend, question qui monte, alerte grave). Une ligne de texte discrète en bas.
+- **Swipe vers le haut** : la constellation des apps. Toucher un point ouvre l'app.
+- **Appui long** : réglages (cerveau, son, écran d'accueil, accès aux notifications).
+- **Doigt** : pousse le relief.
+
+## Écran d'accueil
+
+Appui long → « Définir comme écran d'accueil » → choisir **Présence**. Home ramène toujours à l'instrument. Réversible au même endroit.
 
 ## Tester chaque module (à voix haute, après un tap)
 
