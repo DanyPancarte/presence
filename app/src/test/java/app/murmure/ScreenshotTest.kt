@@ -95,13 +95,17 @@ class ScreenshotTest {
 
     @Test fun live() {
         val text = "Bonjour, j'aimerais prendre une note en lien avec le dossier Projet Atlas. Alors ce matin avec Marc on a revu la maquette, " +
-            "faut que j'envoie le brief demain. Julie propose un atelier au Café Olimpico"
+            "faut que j'envoie le brief demain. Rendez-vous jeudi 14h avec Julie au Café Olimpico. Je me sens motivé, " +
+            "et j'ai une idée : un mode focus"
         val terms = mapOf("Projet Atlas" to "project", "Marc" to "person", "maquette" to "concept", "Julie" to "person", "Café Olimpico" to "place", "brief" to "concept")
+        val full = "$text de vingt-cinq minutes"
         val ui = LiveUi(
-            voice = VoiceState(phase = Phase.LISTENING, committed = text, partial = "vendredi prochain", engine = "Gemini Live", startedAt = 0),
+            voice = VoiceState(phase = Phase.LISTENING, committed = text, partial = "de vingt-cinq minutes", engine = "Gemini Live", startedAt = 0, level = 0.5f),
             levels = List(42) { i -> (0.2f + 0.6f * kotlin.math.abs(kotlin.math.sin(i * 0.45f))) * (i / 42f) },
-            hits = LocalBrain.highlight("$text vendredi prochain", terms),
+            hits = LocalBrain.highlight(full, terms),
             declaredFolder = "Projet Atlas", elapsedSec = 47, started = true,
+            moments = LocalBrain.detectMoments(full), topic = "Maquette Atlas", valence = 0.6f, emotion = "fierté", energy = "haute",
+            insight = "Marc revient pour la 3e fois cette semaine — toujours autour de la maquette.",
         )
         shoot("02-dictee-live") { RecordContent(ui, daily = false, permissionDenied = false, onClose = {}, onStop = {}) }
     }
@@ -109,10 +113,10 @@ class ScreenshotTest {
     @Test fun ritual() {
         val text = "Grosse journée. Gym ce matin, puis bureau. Souper avec Julie, ça m'a fait du bien"
         val ui = LiveUi(
-            voice = VoiceState(phase = Phase.LISTENING, committed = text, engine = "Gemini Live"),
+            voice = VoiceState(phase = Phase.LISTENING, committed = text, engine = "Gemini Live", level = 0.3f),
             levels = List(42) { i -> 0.1f + 0.5f * kotlin.math.abs(kotlin.math.cos(i * 0.3f)) },
             hits = LocalBrain.highlight(text, mapOf("Gym" to "activity", "Julie" to "person", "bureau" to "place")),
-            elapsedSec = 112, started = true, mood = 4,
+            elapsedSec = 112, started = true, mood = 4, valence = 0.5f, emotion = "calme",
         )
         shoot("03-rituel") { RecordContent(ui, daily = true, permissionDenied = false, onClose = {}, onStop = {}) }
     }
@@ -120,12 +124,11 @@ class ScreenshotTest {
     @Test fun review() {
         seed()
         val id = runBlocking {
-            val nid = app.repo.saveDraft(
-                "Bonjour, une note pour le dossier Projet Atlas. Avec Marc on a revu la maquette, faut que j'envoie le brief demain. Julie propose un atelier.",
-                52, false, null,
-            )
-            app.repo.analyze(nid) // clé « demo » invalide → proposition locale, sauvegardée
-            nid
+            val text = "Bonjour, une note pour le dossier Projet Atlas. Avec Marc on a revu la maquette, faut que j'envoie le brief demain. " +
+                "Nouvelle note : idées pour le studio de Julie, un nom court et des ateliers le samedi. Rendez-vous jeudi 14h avec Julie au café. Je me sens motivé."
+            val cid = app.repo.saveCapture(text, 74, false, null, LocalBrain.detectMoments(text))
+            app.repo.analyzeCapture(cid) // clé « demo » invalide → proposition locale, sauvegardée
+            cid
         }
         shoot("04-validation") { ReviewScreen(rememberNavController(), id) }
     }

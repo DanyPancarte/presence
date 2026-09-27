@@ -229,6 +229,9 @@ fun SettingsScreen(nav: NavHostController) {
                 ToggleRow("Surlignage IA en direct", "Détecte concepts et personnes pendant que tu parles", s.liveHighlights) { v ->
                     app.settings.update { it.copy(liveHighlights = v) }
                 }
+                ToggleRow("Démarrage à la voix", "Sur l'accueil, commence à parler : la dictée démarre seule", s.voiceStart) { v ->
+                    app.settings.update { it.copy(voiceStart = v) }
+                }
                 TextButton(onClick = { advanced = !advanced }) { Text(if (advanced) "Masquer les modèles" else "Modèles (avancé)", color = M.Muted) }
                 if (advanced) {
                     var tm by remember { mutableStateOf(s.textModel) }
@@ -239,6 +242,14 @@ fun SettingsScreen(nav: NavHostController) {
                     Spacer(Modifier.height(8.dp))
                     GhostButton("Appliquer") { app.settings.update { it.copy(textModel = tm.trim(), liveModel = lm.trim()) } }
                 }
+            }
+
+            Spacer(Modifier.height(14.dp))
+            Card {
+                Eyebrow("Retours")
+                Spacer(Modifier.height(6.dp))
+                ToggleRow("Sons", "Petits repères sonores : début, fin, moment attrapé", s.sounds) { v -> app.settings.update { it.copy(sounds = v) } }
+                ToggleRow("Vibrations", "Retour haptique sous le doigt", s.haptics) { v -> app.settings.update { it.copy(haptics = v) } }
             }
 
             // ---------- Rituel ----------

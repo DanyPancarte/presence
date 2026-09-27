@@ -8,23 +8,30 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,6 +40,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -43,26 +54,27 @@ import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
@@ -71,21 +83,29 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
+import app.murmure.ai.Emotions
 import app.murmure.ai.LocalBrain
+import app.murmure.ai.Moment
+import app.murmure.ai.MomentKind
+import app.murmure.core.Dates
 import app.murmure.ui.Routes
+import app.murmure.ui.components.Aura
 import app.murmure.ui.components.Banner
-import app.murmure.ui.components.PrimaryButton
+import app.murmure.ui.components.Feedback
+import app.murmure.ui.components.IconAction
 import app.murmure.ui.components.PulsingDot
 import app.murmure.ui.components.Tag
 import app.murmure.ui.components.Waveform
 import app.murmure.ui.components.moodFaces
 import app.murmure.ui.components.moodLabels
+import app.murmure.ui.components.pressScale
 import app.murmure.ui.theme.Fraunces
 import app.murmure.ui.theme.M
 import app.murmure.ui.theme.Manrope
@@ -101,7 +121,19 @@ private val dailyPrompts = listOf(
     "Et qu'est-ce qui t'en a pris ?",
     "T'as bougé ? Gym, marche, sortie ?",
     "Une chose dont t'es fier·e ?",
+    "Quelque chose à faire demain ?",
 )
+
+/** Couleur d'un moment selon sa nature. */
+fun momentColor(kind: String): Color = when (kind) {
+    MomentKind.TASK -> M.Mint
+    MomentKind.EVENT -> M.Sky
+    MomentKind.MOOD -> M.Rose
+    MomentKind.IDEA -> M.Butter
+    MomentKind.NOTE -> M.Lilac
+    MomentKind.PERSON -> M.Peach
+    else -> M.Lilac
+}
 
 @Composable
 fun RecordScreen(nav: NavHostController, daily: Boolean) {
@@ -140,15 +172,11 @@ fun RecordScreen(nav: NavHostController, daily: Boolean) {
     BackHandler { quit() }
 
     if (moodStep) {
-        MoodStep(
-            onPick = { vm.setMood(it); moodStep = false },
-            onSkip = { moodStep = false },
-            onClose = { nav.popBackStack() },
-        )
+        MoodStep(onPick = { vm.setMood(it); moodStep = false }, onSkip = { moodStep = false }, onClose = { nav.popBackStack() })
         return
     }
 
-    RecordContent(ui, daily, permissionDenied, onClose = { quit() }, onStop = { vm.stopAndSave() })
+    RecordContent(ui, daily, permissionDenied, onClose = { quit() }, onStop = { vm.stopAndSave() }, onDismissMoment = vm::dismissMoment)
 
     if (confirmQuit) AlertDialog(
         onDismissRequest = { confirmQuit = false },
@@ -162,60 +190,70 @@ fun RecordScreen(nav: NavHostController, daily: Boolean) {
 
 /** Écran de dictée sans état : rend l'écriture en direct à partir de [LiveUi]. */
 @Composable
-fun RecordContent(ui: LiveUi, daily: Boolean, permissionDenied: Boolean, onClose: () -> Unit, onStop: () -> Unit) {
-    Column(Modifier.fillMaxSize()) {
-        // ---------- Barre du haut ----------
-        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onClose) { Icon(Icons.Rounded.Close, "Fermer", tint = M.Muted) }
-            Spacer(Modifier.weight(1f))
-            EngineBadge(ui)
-            Spacer(Modifier.weight(1f))
-            val shown = if (daily) (RecordViewModel.DAILY_LIMIT_SEC - ui.elapsedSec).coerceAtLeast(0) else ui.elapsedSec
-            Text(
-                "%d:%02d".format(shown / 60, shown % 60),
-                style = MaterialTheme.typography.titleMedium, color = if (daily && shown < 30) M.Peach else M.Text,
-                modifier = Modifier.padding(end = 16.dp),
-            )
-        }
+fun RecordContent(
+    ui: LiveUi, daily: Boolean, permissionDenied: Boolean,
+    onClose: () -> Unit, onStop: () -> Unit, onDismissMoment: (String) -> Unit = {},
+) {
+    val v = ui.voice
+    Box(Modifier.fillMaxSize()) {
+        Aura(level = v.level, valence = ui.valence, energy = ui.energy, listening = v.phase == Phase.LISTENING, modifier = Modifier.fillMaxSize())
 
-        if (daily) DailyPrompt()
-
-        // ---------- Intention détectée ----------
-        AnimatedVisibility(ui.declaredFolder != null, enter = fadeIn() + expandVertically()) {
-            Row(Modifier.padding(horizontal = 22.dp, vertical = 4.dp)) {
-                Tag("Dossier détecté : ${ui.declaredFolder}", color = M.Rose, leading = "📁")
-            }
-        }
-        ui.voice.notice?.let { Banner(it, M.Butter, Modifier.padding(horizontal = 22.dp, vertical = 6.dp)) }
-        ui.voice.error?.let { Banner(it, M.Coral, Modifier.padding(horizontal = 22.dp, vertical = 6.dp)) }
-        if (permissionDenied) Banner("Le micro est refusé. Active-le dans les paramètres Android pour dicter.", M.Coral, Modifier.padding(horizontal = 22.dp, vertical = 6.dp))
-
-        // ---------- Écriture en direct ----------
-        LiveText(ui, Modifier.weight(1f))
-
-        // ---------- Liens détectés ----------
-        LinkChips(ui.hits)
-
-        // ---------- Bas : onde + stop ----------
-        Column(Modifier.fillMaxWidth().padding(bottom = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Waveform(ui.levels, Modifier.fillMaxWidth().height(54.dp).padding(horizontal = 28.dp), color = if (daily) M.Peach else M.Lilac)
-            Spacer(Modifier.height(14.dp))
-            AnimatedContent(ui.saving || ui.voice.phase == Phase.FINALIZING, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "stop") { busy ->
-                if (busy) {
-                    Row(Modifier.height(84.dp), verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(color = M.Lilac, strokeWidth = 3.dp, modifier = Modifier.size(28.dp))
-                        Spacer(Modifier.width(14.dp))
-                        Text("Je finalise ta note…", style = MaterialTheme.typography.titleMedium, color = M.Text)
-                    }
-                } else StopButton(
-                    progress = if (daily) ui.elapsedSec / RecordViewModel.DAILY_LIMIT_SEC.toFloat() else null,
-                    onClick = onStop,
+        Column(Modifier.fillMaxSize()) {
+            // ---------- Barre du haut ----------
+            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconAction(Icons.Rounded.Close, "Fermer", onClick = onClose)
+                Spacer(Modifier.weight(1f))
+                EngineBadge(ui)
+                Spacer(Modifier.weight(1f))
+                val shown = if (daily) (RecordViewModel.DAILY_LIMIT_SEC - ui.elapsedSec).coerceAtLeast(0) else ui.elapsedSec
+                Text(
+                    "%d:%02d".format(shown / 60, shown % 60),
+                    style = MaterialTheme.typography.titleMedium, color = if (daily && shown < 30) M.Peach else M.Text,
+                    modifier = Modifier.padding(end = 16.dp),
                 )
             }
-            Text(
-                if (daily) "5 minutes max · arrête quand tu veux" else "Terminer",
-                style = MaterialTheme.typography.labelMedium, color = M.Faint, modifier = Modifier.padding(top = 6.dp),
-            )
+
+            if (daily) DailyPrompt()
+
+            // ---------- Sujet · dossier · émotion ----------
+            ContextStrip(ui)
+
+            ui.voice.notice?.let { Banner(it, M.Butter, Modifier.padding(horizontal = 22.dp, vertical = 6.dp)) }
+            ui.voice.error?.let { Banner(it, M.Coral, Modifier.padding(horizontal = 22.dp, vertical = 6.dp)) }
+            if (permissionDenied) Banner("Le micro est refusé. Active-le dans les paramètres Android pour dicter.", M.Coral, Modifier.padding(horizontal = 22.dp, vertical = 6.dp))
+
+            // ---------- Écriture en direct ----------
+            LiveText(ui, Modifier.weight(1f))
+
+            // ---------- Insight ----------
+            AnimatedVisibility(ui.insight != null, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
+                InsightLine(ui.insight.orEmpty())
+            }
+
+            // ---------- Moments attrapés ----------
+            MomentsRail(ui.moments, ui.freshMomentId, onDismissMoment)
+
+            // ---------- Bas : onde + stop ----------
+            Column(Modifier.fillMaxWidth().padding(bottom = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Waveform(ui.levels, Modifier.fillMaxWidth().height(46.dp).padding(horizontal = 28.dp), color = if (daily) M.Peach else M.Lilac)
+                Spacer(Modifier.height(10.dp))
+                AnimatedContent(ui.saving || v.phase == Phase.FINALIZING, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "stop") { busy ->
+                    if (busy) {
+                        Row(Modifier.height(84.dp), verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(color = M.Lilac, strokeWidth = 3.dp, modifier = Modifier.size(28.dp))
+                            Spacer(Modifier.width(14.dp))
+                            Text("Je range tout ça…", style = MaterialTheme.typography.titleMedium, color = M.Text)
+                        }
+                    } else StopButton(progress = if (daily) ui.elapsedSec / RecordViewModel.DAILY_LIMIT_SEC.toFloat() else null, onClick = onStop)
+                }
+                Text(
+                    when {
+                        ui.moments.isEmpty() -> if (daily) "5 minutes max · arrête quand tu veux" else "Terminer quand tu veux"
+                        else -> "${ui.moments.size} moment${if (ui.moments.size > 1) "s" else ""} attrapé${if (ui.moments.size > 1) "s" else ""} · Terminer"
+                    },
+                    style = MaterialTheme.typography.labelMedium, color = M.Faint, modifier = Modifier.padding(top = 6.dp),
+                )
+            }
         }
     }
 }
@@ -224,20 +262,22 @@ fun RecordContent(ui: LiveUi, daily: Boolean, permissionDenied: Boolean, onClose
 private fun EngineBadge(ui: LiveUi) {
     val v = ui.voice
     Row(
-        Modifier.clip(RoundedCornerShape(50)).background(M.Surface).padding(horizontal = 12.dp, vertical = 6.dp),
+        Modifier.clip(RoundedCornerShape(50)).background(M.Surface.copy(alpha = 0.85f)).padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        when (v.phase) {
-            Phase.LISTENING -> PulsingDot(M.Peach)
+        when {
+            ui.thinking -> PulsingDot(M.Lilac)
+            v.phase == Phase.LISTENING -> PulsingDot(M.Peach)
             else -> PulsingDot(M.Muted)
         }
         Spacer(Modifier.width(8.dp))
         Text(
-            when (v.phase) {
-                Phase.IDLE, Phase.STARTING -> "Connexion…"
-                Phase.LISTENING -> "J'écoute · ${v.engine}"
-                Phase.FINALIZING -> "Finalisation"
-                Phase.DONE -> "Terminé"
+            when {
+                ui.thinking -> "Je réfléchis…"
+                v.phase == Phase.IDLE || v.phase == Phase.STARTING -> "Connexion…"
+                v.phase == Phase.LISTENING -> "J'écoute · ${v.engine}"
+                v.phase == Phase.FINALIZING -> "Finalisation"
+                else -> "Terminé"
             },
             style = MaterialTheme.typography.labelMedium, color = M.Text,
         )
@@ -256,6 +296,102 @@ private fun DailyPrompt() {
     }
 }
 
+/** Bandeau contextuel : sujet courant, dossier détecté, émotion perçue. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ContextStrip(ui: LiveUi) {
+    val any = ui.topic != null || ui.declaredFolder != null || ui.emotion != "neutre"
+    AnimatedVisibility(any, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
+        FlowRow(
+            Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            ui.declaredFolder?.let { AnimatedTag("Dossier : $it", M.Rose, "📁") }
+            ui.topic?.let { AnimatedTag("Sujet : $it", M.Lilac, "🧠") }
+            if (ui.emotion != "neutre") AnimatedTag(ui.emotion, Palette.emotion(ui.emotion), Emotions.emoji(ui.emotion))
+        }
+    }
+}
+
+@Composable
+private fun AnimatedTag(text: String, color: Color, leading: String) {
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(text) { shown = true }
+    val s by animateFloatAsState(if (shown) 1f else 0.6f, spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium), label = "tag")
+    Tag(text, color, leading = leading, modifier = Modifier.scale(s))
+}
+
+@Composable
+private fun InsightLine(text: String) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 4.dp)
+            .clip(RoundedCornerShape(16.dp)).background(M.Lilac.copy(alpha = 0.12f)).padding(horizontal = 12.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("✨", fontSize = 14.sp)
+        Spacer(Modifier.width(8.dp))
+        Text(text, style = MaterialTheme.typography.bodySmall, color = M.Text, maxLines = 2, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/** Rail des moments : chaque carte glisse en entrant, la plus récente est mise en avant. */
+@Composable
+private fun MomentsRail(moments: List<Moment>, freshId: String?, onDismiss: (String) -> Unit) {
+    val state = rememberLazyListState()
+    LaunchedEffect(moments.size) { if (moments.isNotEmpty()) state.animateScrollToItem(moments.lastIndex) }
+    AnimatedVisibility(moments.isNotEmpty(), enter = fadeIn() + expandVertically()) {
+        LazyRow(
+            state = state, contentPadding = PaddingValues(horizontal = 22.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            items(moments, key = { it.id }) { m -> MomentCard(m, fresh = m.id == freshId, onDismiss = { onDismiss(m.id) }) }
+        }
+    }
+}
+
+@Composable
+fun MomentCard(m: Moment, fresh: Boolean, onDismiss: (() -> Unit)? = null) {
+    val c = momentColor(m.kind)
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { shown = true }
+    val s by animateFloatAsState(if (shown) 1f else 0.7f, spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow), label = "card")
+    val glow by animateFloatAsState(if (fresh) 0.55f else 0.3f, tween(900), label = "glow")
+    val interaction = remember { MutableInteractionSource() }
+    val view = LocalView.current
+    Column(
+        Modifier.scale(s).widthIn(min = 150.dp, max = 230.dp)
+            .pressScale(interaction, 0.96f)
+            .clip(RoundedCornerShape(18.dp))
+            .background(Brush.linearGradient(listOf(c.copy(alpha = 0.26f), c.copy(alpha = 0.10f))))
+            .border(1.dp, c.copy(alpha = glow), RoundedCornerShape(18.dp))
+            .then(if (onDismiss != null) Modifier.clickable(interactionSource = interaction, indication = null) { Feedback.tap(view); onDismiss() } else Modifier)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(MomentKind.emoji(m.kind), fontSize = 13.sp)
+            Spacer(Modifier.width(6.dp))
+            Text(MomentKind.verb(m.kind).uppercase(), style = MaterialTheme.typography.labelSmall, color = c)
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(m.title, style = MaterialTheme.typography.titleSmall, color = M.Text, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        val sub = when (m.kind) {
+            MomentKind.TASK -> Dates.prettyDue(m.due)
+            MomentKind.EVENT -> m.due?.let { prettyWhen(it, m.allDay) } ?: ""
+            MomentKind.MOOD -> m.mood?.let { "${moodFaces[it - 1]} ${moodLabels[it - 1]}" } ?: ""
+            MomentKind.NOTE -> m.folder?.let { "→ $it" } ?: ""
+            else -> ""
+        }
+        if (sub.isNotBlank()) Text(sub, style = MaterialTheme.typography.labelSmall, color = M.Muted, maxLines = 1)
+        if (onDismiss != null) Text("touche pour retirer", style = MaterialTheme.typography.labelSmall, color = M.Faint.copy(alpha = 0.7f), modifier = Modifier.padding(top = 2.dp))
+    }
+}
+
+fun prettyWhen(iso: String, allDay: Boolean): String {
+    val day = Dates.prettyDue(iso.take(10)).substringAfter("En retard · ")
+    if (allDay || iso.length < 16) return day
+    return "$day · ${iso.substring(11).replace(':', 'h')}"
+}
+
 @Composable
 private fun LiveText(ui: LiveUi, modifier: Modifier) {
     val scroll = rememberScrollState()
@@ -271,15 +407,17 @@ private fun LiveText(ui: LiveUi, modifier: Modifier) {
             if (full.isBlank()) {
                 Text(
                     if (v.phase == Phase.LISTENING) "Vas-y, je t'écoute…" else "Je prépare le micro…",
-                    fontFamily = Fraunces, fontSize = 30.sp, lineHeight = 38.sp, color = M.Faint,
+                    fontFamily = Fraunces, fontSize = 30.sp, lineHeight = 38.sp, color = M.Muted,
                 )
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    "Astuce : commence par « une note pour le dossier… » et je la classe toute seule.",
+                    "Dis « nouvelle note », « faut que je… » ou « rendez-vous jeudi 14h » : je trie en direct.",
                     style = MaterialTheme.typography.bodyMedium, color = M.Faint,
                 )
             } else {
                 val boundary = committed.length.coerceAtMost(full.length)
+                // Plages de moments (soulignées par nature) + entités (surlignées)
+                val spans = (ui.moments.filter { it.start >= 0 && it.end <= full.length }.map { Triple(it.start, it.end, momentColor(it.kind)) })
                 val text = buildAnnotatedString {
                     fun plain(from: Int, to: Int) {
                         if (from >= to) return
@@ -298,6 +436,7 @@ private fun LiveText(ui: LiveUi, modifier: Modifier) {
                         i = h.end
                     }
                     plain(i, full.length)
+                    spans.forEach { (a, b, c) -> addStyle(SpanStyle(textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline, color = c), a, b) }
                     withStyle(SpanStyle(color = M.Peach.copy(alpha = if (v.phase == Phase.LISTENING) caretA else 0f))) { append(" ▍") }
                 }
                 Text(text, fontFamily = Manrope, fontSize = 24.sp, lineHeight = 36.sp, color = M.Text, fontWeight = FontWeight.Medium)
@@ -310,30 +449,16 @@ private fun LiveText(ui: LiveUi, modifier: Modifier) {
                 }
             }
         }
-        // Fondus haut/bas pour l'effet « page qui s'écrit »
-        Box(Modifier.fillMaxWidth().height(24.dp).background(Brush.verticalGradient(listOf(M.Ink, M.Ink.copy(alpha = 0f)))))
-        Box(Modifier.fillMaxWidth().height(36.dp).align(Alignment.BottomCenter).background(Brush.verticalGradient(listOf(M.Ink.copy(alpha = 0f), M.Ink))))
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun LinkChips(hits: List<LocalBrain.Hit>) {
-    val unique = hits.distinctBy { it.label.lowercase() }.takeLast(10)
-    AnimatedVisibility(unique.isNotEmpty()) {
-        FlowRow(
-            Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            unique.forEach { h -> Tag(h.label, color = Palette.kind(h.kind), leading = Palette.kindIcon(h.kind)) }
-        }
+        Box(Modifier.fillMaxWidth().height(24.dp).background(Brush.verticalGradient(listOf(M.Ink.copy(alpha = 0.7f), M.Ink.copy(alpha = 0f)))))
+        Box(Modifier.fillMaxWidth().height(36.dp).align(Alignment.BottomCenter).background(Brush.verticalGradient(listOf(M.Ink.copy(alpha = 0f), M.Ink.copy(alpha = 0.7f)))))
     }
 }
 
 @Composable
 private fun StopButton(progress: Float?, onClick: () -> Unit) {
-    Box(Modifier.size(84.dp), contentAlignment = Alignment.Center) {
+    val interaction = remember { MutableInteractionSource() }
+    val view = LocalView.current
+    Box(Modifier.size(84.dp).pressScale(interaction, 0.9f), contentAlignment = Alignment.Center) {
         Canvas(Modifier.fillMaxSize()) {
             val sw = 4.dp.toPx()
             drawCircle(M.Line, size.minDimension / 2 - sw / 2, style = Stroke(sw))
@@ -343,7 +468,8 @@ private fun StopButton(progress: Float?, onClick: () -> Unit) {
             )
         }
         Box(
-            Modifier.size(64.dp).clip(CircleShape).background(M.Peach).clickable(onClick = onClick),
+            Modifier.size(64.dp).clip(CircleShape).background(M.Peach)
+                .clickable(interactionSource = interaction, indication = null) { Feedback.confirm(view); onClick() },
             contentAlignment = Alignment.Center,
         ) { Icon(Icons.Rounded.Stop, "Terminer", tint = M.Ink, modifier = Modifier.size(30.dp)) }
     }
@@ -351,8 +477,9 @@ private fun StopButton(progress: Float?, onClick: () -> Unit) {
 
 @Composable
 private fun MoodStep(onPick: (Int) -> Unit, onSkip: () -> Unit, onClose: () -> Unit) {
+    val view = LocalView.current
     Column(Modifier.fillMaxSize().padding(24.dp)) {
-        Row { IconButton(onClick = onClose) { Icon(Icons.Rounded.Close, "Fermer", tint = M.Muted) } }
+        Row { IconAction(Icons.Rounded.Close, "Fermer", onClick = onClose) }
         Spacer(Modifier.weight(1f))
         Text("Rituel du jour", style = MaterialTheme.typography.labelSmall, color = M.Peach)
         Spacer(Modifier.height(8.dp))
@@ -361,10 +488,12 @@ private fun MoodStep(onPick: (Int) -> Unit, onSkip: () -> Unit, onClose: () -> U
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             moodFaces.forEachIndexed { i, f ->
                 val c = Palette.mood(i + 1f)
+                val interaction = remember { MutableInteractionSource() }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(
-                        Modifier.size(58.dp).clip(CircleShape).background(c.copy(alpha = 0.18f))
-                            .border(1.dp, c.copy(alpha = 0.5f), CircleShape).clickable { onPick(i + 1) },
+                        Modifier.size(58.dp).pressScale(interaction, 0.85f).clip(CircleShape).background(c.copy(alpha = 0.18f))
+                            .border(1.dp, c.copy(alpha = 0.5f), CircleShape)
+                            .clickable(interactionSource = interaction, indication = null) { Feedback.confirm(view); Feedback.play(Feedback.Sound.TAP); onPick(i + 1) },
                         contentAlignment = Alignment.Center,
                     ) { Text(f, fontSize = 28.sp) }
                     Spacer(Modifier.height(6.dp))
@@ -373,10 +502,7 @@ private fun MoodStep(onPick: (Int) -> Unit, onSkip: () -> Unit, onClose: () -> U
             }
         }
         Spacer(Modifier.weight(1f))
-        Text(
-            "Ensuite, raconte ta journée. 5 minutes max, pas de pression.",
-            style = MaterialTheme.typography.bodyMedium, color = M.Muted,
-        )
+        Text("Ensuite, raconte ta journée. 5 minutes max, pas de pression.", style = MaterialTheme.typography.bodyMedium, color = M.Muted)
         Spacer(Modifier.height(12.dp))
         TextButton(onClick = onSkip) { Text("Passer cette question", color = M.Faint) }
     }

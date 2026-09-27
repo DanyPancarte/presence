@@ -60,6 +60,43 @@ class LocalBrainTest {
     }
 }
 
+class MomentsTest {
+    @Test fun momentsLocaux() {
+        val today = LocalDate.of(2026, 9, 23) // mercredi
+        val t = "Une note pour le dossier Atlas. Faut que j'envoie le brief demain. Rendez-vous jeudi 14h avec Julie au café. " +
+            "Je me sens fatigué. J'ai une idée : un mode focus. Nouvelle note : liste d'épicerie, lait et pain."
+        val m = LocalBrain.detectMoments(t, today)
+        val kinds = m.map { it.kind }
+        assertEquals(listOf("note", "task", "event", "mood", "idea", "note"), kinds)
+        assertEquals("2026-09-24", m[1].due)
+        assertEquals("2026-09-24T14:00", m[2].due)
+        assertEquals(listOf("Julie"), m[2].who)
+        assertEquals("fatigue", m[3].emotion); assertEquals(2, m[3].mood)
+        assertTrue(m[4].title.contains("mode focus"))
+        assertEquals("Atlas", m[0].folder)
+        // toutes les plages tombent dans le texte
+        assertTrue(m.all { it.start >= 0 && it.end <= t.length && it.start < it.end })
+    }
+
+    @Test fun fusionIaRemplaceLocal() {
+        val local = listOf(app.murmure.ai.Moment("l:task:10", "task", "Envoyer le brief", start = 10, end = 40))
+        val ai = listOf(app.murmure.ai.Moment("a:task:12", "task", "Envoyer le brief à Marc", start = 12, end = 38, byAi = true))
+        val merged = LocalBrain.mergeMoments(local, ai)
+        assertEquals(1, merged.size); assertTrue(merged[0].byAi)
+    }
+
+    @Test fun sessionHorsLigneMultiNotes() {
+        val t = "Bonjour, une note pour le dossier Travail. Réunion productive avec Marc, on a validé la maquette. " +
+            "Nouvelle note : idées pour le studio de Julie, un nom court et des ateliers le samedi. Faut que j'appelle Julie demain."
+        val ctx = AnalysisContext(listOf("Travail", "Idées"), emptyList(), emptyList(), false, null)
+        val sp = LocalBrain.offlineSession(t, ctx, mapOf("Marc" to "person", "Julie" to "person"), emptyList())
+        assertEquals(2, sp.notes.size)
+        assertEquals("Travail", sp.notes[0].folderSuggestions.first().name)
+        assertEquals(1, sp.tasks.size)
+        assertTrue(sp.notes[1].body.contains("studio"))
+    }
+}
+
 class AnalyzerTest {
     private val json = Json { ignoreUnknownKeys = true }
 

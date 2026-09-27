@@ -104,6 +104,44 @@ interface MurmureDao {
     @Query("DELETE FROM tasks WHERE noteId = :noteId AND status = 'suggested'")
     suspend fun clearSuggestedTasks(noteId: String)
 
+    // ---------- Captures ----------
+    @Query("SELECT * FROM captures ORDER BY createdAt DESC")
+    fun capturesFlow(): Flow<List<CaptureEntity>>
+
+    @Query("SELECT * FROM captures WHERE id = :id")
+    suspend fun capture(id: String): CaptureEntity?
+
+    @Query("SELECT * FROM captures WHERE status = 'pending' ORDER BY createdAt DESC")
+    fun pendingCapturesFlow(): Flow<List<CaptureEntity>>
+
+    @Upsert
+    suspend fun upsertCapture(c: CaptureEntity)
+
+    @Query("DELETE FROM captures WHERE id = :id")
+    suspend fun deleteCapture(id: String)
+
+    @Query("SELECT * FROM notes WHERE captureId = :captureId")
+    suspend fun notesOfCapture(captureId: String): List<NoteEntity>
+
+    // ---------- Agenda ----------
+    @Query("SELECT * FROM events WHERE status != 'dismissed' ORDER BY startAt")
+    fun eventsFlow(): Flow<List<EventEntity>>
+
+    @Query("SELECT * FROM events")
+    suspend fun allEvents(): List<EventEntity>
+
+    @Upsert
+    suspend fun upsertEvent(e: EventEntity)
+
+    @Query("UPDATE events SET status = :status WHERE id = :id")
+    suspend fun setEventStatus(id: String, status: String)
+
+    @Query("DELETE FROM events WHERE captureId = :captureId AND status = 'suggested'")
+    suspend fun clearSuggestedEvents(captureId: String)
+
+    @Query("DELETE FROM tasks WHERE captureId = :captureId AND status = 'suggested'")
+    suspend fun clearSuggestedTasksOfCapture(captureId: String)
+
     // ---------- Rapports IA ----------
     @Query("SELECT * FROM reports WHERE `key` = :key")
     fun reportFlow(key: String): Flow<ReportEntity?>

@@ -88,7 +88,7 @@ fun NoteScreen(nav: NavHostController, id: String) {
 
     Column(Modifier.fillMaxSize()) {
         TopBar(folder?.let { "${it.emoji ?: "📁"} ${it.name}" } ?: "Note", onBack = { nav.popBackStack() }) {
-            IconButton(onClick = { nav.navigate(Routes.review(id)) }) { Icon(Icons.Rounded.AutoFixHigh, "Reclasser", tint = M.Muted) }
+            IconButton(onClick = { nav.navigate(Routes.reclass(id)) }) { Icon(Icons.Rounded.AutoFixHigh, "Reclasser", tint = M.Muted) }
             IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Rounded.DeleteOutline, "Supprimer", tint = M.Muted) }
         }
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp)) {
@@ -97,7 +97,7 @@ fun NoteScreen(nav: NavHostController, id: String) {
             Text(n.title, style = MaterialTheme.typography.headlineLarge, color = M.Text)
             Spacer(Modifier.height(12.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (n.status == NoteStatus.PENDING) Tag("À classer", M.Butter, leading = "📥") { nav.navigate(Routes.review(id)) }
+                if (n.status == NoteStatus.PENDING) Tag("À classer", M.Butter, leading = "📥") { nav.navigate(Routes.reclass(id)) }
                 n.type?.let { Tag(NoteTypes.label(it), Palette.type(it), leading = NoteTypes.emoji(it)) }
                 n.emotion?.let { Tag(it, Palette.emotion(it), leading = Emotions.emoji(it)) }
                 n.energy?.let { Tag("énergie $it", M.Sky) }

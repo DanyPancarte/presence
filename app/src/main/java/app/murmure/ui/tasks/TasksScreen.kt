@@ -40,6 +40,9 @@ import androidx.navigation.NavHostController
 import app.murmure.MurmureApp
 import app.murmure.core.Dates
 import app.murmure.data.TaskEntity
+import app.murmure.data.EventStatus
+import app.murmure.ui.capture.prettyWhen
+import app.murmure.ui.components.IconAction
 import app.murmure.data.TaskStatus
 import app.murmure.ui.Routes
 import app.murmure.ui.components.EmptyState
@@ -53,8 +56,11 @@ import kotlinx.coroutines.launch
 fun TasksScreen(nav: NavHostController) {
     val repo = MurmureApp.instance.repo
     val tasks by repo.tasks.collectAsState(initial = emptyList())
+    val events by repo.events.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
     val today = Dates.today()
+    val suggestedEvents = events.filter { it.status == EventStatus.SUGGESTED }
+    val upcoming = events.filter { it.status == EventStatus.CONFIRMED && Dates.parseDay(it.startAt)?.isBefore(today) == false }.take(12)
 
     val suggested = tasks.filter { it.status == TaskStatus.SUGGESTED }
     val open = tasks.filter { it.status == TaskStatus.OPEN }
@@ -69,7 +75,7 @@ fun TasksScreen(nav: NavHostController) {
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp)) {
         item {
-            Text("Tâches", style = MaterialTheme.typography.displayMedium, color = M.Text)
+            Text("Agenda", style = MaterialTheme.typography.displayMedium, color = M.Text)
             Text(
                 when {
                     open.isEmpty() -> "Rien qui presse."
@@ -80,8 +86,50 @@ fun TasksScreen(nav: NavHostController) {
             )
             Spacer(Modifier.padding(8.dp))
         }
-        if (tasks.isEmpty()) item {
-            EmptyState("🫶", "Aucune tâche", "Quand tu dis « faut que je… » ou « je dois… », je te propose une tâche avec une échéance. Tu restes maître du oui ou du non.")
+        if (tasks.isEmpty() && events.isEmpty()) item {
+            EmptyState("🫶", "Rien à faire, rien de prévu", "Quand tu dis « faut que je… » ou « rendez-vous jeudi 14h », je te le propose ici. Tu restes maître du oui ou du non.")
+        }
+        if (suggestedEvents.isNotEmpty()) {
+            item { Header("Rendez-vous à confirmer", M.Sky) }
+            items(suggestedEvents, key = { "e-" + it.id }) { e ->
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(18.dp))
+                        .background(M.Sky.copy(alpha = 0.10f)).border(1.dp, M.Sky.copy(alpha = 0.3f), RoundedCornerShape(18.dp)).padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(e.title, style = MaterialTheme.typography.bodyMedium, color = M.Text)
+                        Text(prettyWhen(e.startAt, e.allDay), style = MaterialTheme.typography.labelSmall, color = M.Sky)
+                    }
+                    IconAction(Icons.Rounded.Close, "Ignorer") { scope.launch { repo.setEvent(e.id, EventStatus.DISMISSED) } }
+                    IconAction(Icons.Rounded.Check, "Confirmer", tint = M.Mint) { scope.launch { repo.setEvent(e.id, EventStatus.CONFIRMED) } }
+                }
+            }
+        }
+        if (upcoming.isNotEmpty()) {
+            item { Header("À venir", M.Sky) }
+            items(upcoming, key = { "u-" + it.id }) { e ->
+                val d = Dates.parseDay(e.startAt)
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(RoundedCornerShape(16.dp)).background(M.Surface)
+                        .clickable { e.noteId?.let { nav.navigate(Routes.note(it)) } }.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.width(52.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(d?.dayOfMonth?.toString() ?: "?", style = MaterialTheme.typography.headlineSmall, color = if (d == today) M.Peach else M.Text)
+                        Text(d?.format(java.time.format.DateTimeFormatter.ofPattern("EEE", Dates.fr)).orEmpty(), style = MaterialTheme.typography.labelSmall, color = M.Muted)
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Box(Modifier.size(width = 3.dp, height = 34.dp).clip(RoundedCornerShape(2.dp)).background(M.Sky))
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(e.title, style = MaterialTheme.typography.bodyMedium, color = M.Text, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                        val meta = listOfNotNull(if (!e.allDay && e.startAt.length >= 16) e.startAt.substring(11).replace(':', 'h') else "journée", e.where).joinToString(" · ")
+                        Text(meta, style = MaterialTheme.typography.labelSmall, color = M.Muted)
+                    }
+                    IconAction(Icons.Rounded.Close, "Retirer") { scope.launch { repo.setEvent(e.id, EventStatus.DISMISSED) } }
+                }
+            }
         }
         if (suggested.isNotEmpty()) {
             item { Header("À confirmer", M.Butter) }

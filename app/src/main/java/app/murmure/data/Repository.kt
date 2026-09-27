@@ -7,6 +7,9 @@ import app.murmure.ai.LocalBrain
 import app.murmure.ai.NoteAnalyzer
 import app.murmure.ai.NoteProposal
 import app.murmure.ai.TaskGuess
+import app.murmure.ai.Moment
+import app.murmure.ai.MomentKind
+import app.murmure.ai.SessionProposal
 import app.murmure.core.Dates
 import app.murmure.core.SettingsStore
 import app.murmure.core.Text
@@ -38,6 +41,17 @@ data class Validation(
 
 data class AnalysisResult(val proposal: NoteProposal, val warning: String? = null)
 
+data class SessionResult(val proposal: SessionProposal, val warning: String? = null)
+
+/** Validation d'une capture complète : n notes + tâches + agenda + mood. */
+data class SessionValidation(
+    val notes: List<Validation>,
+    val tasks: List<TaskGuess>,
+    val events: List<Moment>,
+    val mood: Int?,
+    val moodEmotion: String?,
+)
+
 class Repository(
     private val db: MurmureDb,
     private val settings: SettingsStore,
@@ -53,6 +67,9 @@ class Repository(
     val mentions = dao.mentionsFlow()
     val links = dao.linksFlow()
     val tasks = dao.tasksFlow()
+    val events = dao.eventsFlow()
+    val captures = dao.capturesFlow()
+    val pendingCaptures = dao.pendingCapturesFlow()
 
     suspend fun ensureDefaults() {
         if (dao.folderCount() > 0) return
@@ -66,6 +83,101 @@ class Repository(
         dao.insertFolder(f)
         return dao.folderByName(name.trim())?.id ?: f.id
     }
+
+    // ---------------- Captures (sessions de dictée) ----------------
+
+    /** Sauvegarde immédiate de la dictée : elle existe avant toute analyse. */
+    suspend fun saveCapture(transcript: String, durationSec: Int, isDaily: Boolean, mood: Int?, moments: List<Moment>): String {
+        val now = System.currentTimeMillis()
+        val id = Text.uuid()
+        dao.upsertCapture(
+            CaptureEntity(
+                id = id, transcript = transcript, createdAt = now, dayKey = Dates.dayKey(now), durationSec = durationSec,
+                isDaily = isDaily, mood = mood, timeOfDay = Dates.timeOfDay(now),
+            )
+        )
+        pendingMoments[id] = moments
+        return id
+    }
+
+    /** Moments repérés en direct, gardés en mémoire le temps de l'analyse. */
+    private val pendingMoments = HashMap<String, List<Moment>>()
+
+    fun sessionProposalOf(c: CaptureEntity): SessionProposal? =
+        c.proposalJson?.let { runCatching { json.decodeFromString(SessionProposal.serializer(), it) }.getOrNull() }
+
+    suspend fun analyzeCapture(captureId: String): SessionResult = withContext(Dispatchers.IO) {
+        val c = dao.capture(captureId) ?: error("Capture introuvable")
+        val ctx = context(c.isDaily, c.mood)
+        val moments = pendingMoments[captureId] ?: LocalBrain.detectMoments(c.transcript)
+        val s = settings.current
+        var warning: String? = null
+        val proposal = if (s.hasAiKey && c.transcript.isNotBlank()) {
+            runCatching { analyzer.analyzeCapture(s, c.transcript, ctx, moments) }.getOrElse { e ->
+                warning = "Analyse IA indisponible (${e.message?.take(90)}). Proposition locale affichée."
+                LocalBrain.offlineSession(c.transcript, ctx, knownTerms(), moments)
+            }
+        } else {
+            if (!s.hasAiKey) warning = "Sans clé API : découpage et classement proposés localement."
+            LocalBrain.offlineSession(c.transcript, ctx, knownTerms(), moments)
+        }
+        dao.upsertCapture(c.copy(proposalJson = json.encodeToString(SessionProposal.serializer(), proposal)))
+        SessionResult(proposal, warning)
+    }
+
+    /** Applique la validation d'une capture : crée les notes, tâches, rendez-vous. */
+    suspend fun fileCapture(captureId: String, v: SessionValidation) = withContext(Dispatchers.IO) {
+        val c = dao.capture(captureId) ?: return@withContext
+        val now = System.currentTimeMillis()
+        // Notes déjà créées pour cette capture (re-validation) : on les remplace.
+        dao.notesOfCapture(captureId).forEach { deleteNote(it.id) }
+        dao.clearSuggestedTasksOfCapture(captureId)
+        dao.clearSuggestedEvents(captureId)
+        var firstId: String? = null
+        v.notes.forEachIndexed { i, nv ->
+            val id = Text.uuid()
+            if (firstId == null) firstId = id
+            dao.upsertNote(
+                NoteEntity(
+                    id = id, captureId = captureId, title = nv.title, body = nv.body, rawTranscript = c.transcript,
+                    createdAt = c.createdAt + i, updatedAt = now, dayKey = c.dayKey, durationSec = if (i == 0) c.durationSec else 0,
+                    isDaily = c.isDaily && i == 0, mood = if (i == 0) (c.mood ?: v.mood) else null, timeOfDay = c.timeOfDay,
+                )
+            )
+            file(id, nv.copy(acceptedTasks = emptyList()))
+        }
+        v.tasks.forEach { t ->
+            dao.upsertTask(TaskEntity(id = Text.uuid(), noteId = firstId, captureId = captureId, text = t.text, dueDate = t.due, status = TaskStatus.OPEN, reason = t.reason, createdAt = now))
+        }
+        v.events.forEach { e ->
+            dao.upsertEvent(
+                EventEntity(
+                    Text.uuid(), firstId, captureId, e.title, e.due ?: Dates.today().toString(), e.allDay, e.where,
+                    e.who.joinToString("|"), EventStatus.CONFIRMED, e.text.take(120), now,
+                )
+            )
+        }
+        dao.upsertCapture(c.copy(status = CaptureStatus.DONE, mood = c.mood ?: v.mood, proposalJson = null))
+        pendingMoments.remove(captureId)
+    }
+
+    /** « Plus tard » : la capture reste à valider ; tâches et rendez-vous en suggestion. */
+    suspend fun deferCapture(captureId: String, p: SessionProposal?) = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        dao.clearSuggestedTasksOfCapture(captureId)
+        dao.clearSuggestedEvents(captureId)
+        p?.tasks?.forEach { dao.upsertTask(TaskEntity(id = Text.uuid(), noteId = null, captureId = captureId, text = it.text, dueDate = it.due, status = TaskStatus.SUGGESTED, reason = it.reason, createdAt = now)) }
+        p?.events?.forEach { e ->
+            dao.upsertEvent(EventEntity(Text.uuid(), null, captureId, e.title, e.due ?: Dates.today().toString(), e.allDay, e.where, e.who.joinToString("|"), EventStatus.SUGGESTED, e.text.take(120), now))
+        }
+    }
+
+    suspend fun deleteCapture(id: String) = withContext(Dispatchers.IO) {
+        dao.notesOfCapture(id).forEach { deleteNote(it.id) }
+        dao.clearSuggestedTasksOfCapture(id); dao.clearSuggestedEvents(id); dao.deleteCapture(id)
+    }
+
+    suspend fun setEvent(id: String, status: String) = dao.setEventStatus(id, status)
 
     /** Sauvegarde immédiate de la dictée brute : on ne perd jamais une note. */
     suspend fun saveDraft(transcript: String, durationSec: Int, isDaily: Boolean, mood: Int?): String {
@@ -147,7 +259,7 @@ class Repository(
         }
         val now = System.currentTimeMillis()
         v.acceptedTasks.forEach { t ->
-            dao.upsertTask(TaskEntity(Text.uuid(), noteId, t.text, t.due, TaskStatus.OPEN, t.reason, now))
+            dao.upsertTask(TaskEntity(id = Text.uuid(), noteId = noteId, text = t.text, dueDate = t.due, status = TaskStatus.OPEN, reason = t.reason, createdAt = now))
         }
         dao.upsertNote(
             note.copy(
@@ -166,7 +278,7 @@ class Repository(
         val note = dao.note(noteId) ?: return@withContext
         dao.clearSuggestedTasks(noteId)
         proposal?.tasks?.forEach {
-            dao.upsertTask(TaskEntity(Text.uuid(), noteId, it.text, it.due, TaskStatus.SUGGESTED, it.reason, System.currentTimeMillis()))
+            dao.upsertTask(TaskEntity(id = Text.uuid(), noteId = noteId, text = it.text, dueDate = it.due, status = TaskStatus.SUGGESTED, reason = it.reason, createdAt = System.currentTimeMillis()))
         }
         if (note.status != NoteStatus.FILED) dao.upsertNote(note.copy(title = proposal?.title?.ifBlank { null } ?: note.title))
     }
@@ -238,6 +350,11 @@ Règles : tu n'es pas un outil clinique, aucun diagnostic, aucune causalité aff
         buildJsonObject {
             put("app", "Murmure")
             put("exportedAt", Dates.nowIso())
+            put("events", buildJsonArray {
+                dao.allEvents().forEach { e ->
+                    add(buildJsonObject { put("title", e.title); put("startAt", e.startAt); put("allDay", e.allDay); put("where", e.where); put("status", e.status) })
+                }
+            })
             put("notes", buildJsonArray {
                 dao.notes().forEach { n ->
                     add(buildJsonObject {
@@ -254,6 +371,26 @@ Règles : tu n'es pas un outil clinique, aucun diagnostic, aucune causalité aff
                 }
             })
         }.toString()
+    }
+
+    /** Petite phrase d'accueil calculée localement : la dernière chose utile à savoir. */
+    suspend fun homeInsight(): String? = withContext(Dispatchers.IO) {
+        val notes = dao.notes()
+        val events = dao.allEvents().filter { it.status == EventStatus.CONFIRMED }
+        val today = Dates.today()
+        events.firstOrNull { Dates.parseDay(it.startAt) == today }?.let { e ->
+            val t = if (!e.allDay && e.startAt.length >= 16) " à ${e.startAt.substring(11).replace(':', 'h')}" else ""
+            return@withContext "📅 Aujourd'hui$t : ${e.title}"
+        }
+        val portrait = app.murmure.insights.Insights.build(notes, dao.entities(), dao.mentions(), today)
+        portrait.correlations.firstOrNull { it.delta > 0.4f }?.let { c ->
+            return@withContext "✨ Ton mood est plus haut les jours où « ${c.entity.name} » revient (+${Text.d1(c.delta)})."
+        }
+        val week = notes.filter { it.createdAt > System.currentTimeMillis() - 7L * 86_400_000 }
+        val topic = week.flatMap { it.keywords.split("|") }.filter { it.isNotBlank() }.groupingBy { it.lowercase() }.eachCount().maxByOrNull { it.value }
+        if (topic != null && topic.value >= 2) return@withContext "🧠 Cette semaine, tu reviens souvent sur « ${topic.key} » (${topic.value}×)."
+        if (portrait.streak >= 2) return@withContext "🔥 ${portrait.streak} jours de rituel d'affilée. Continue ce soir ?"
+        null
     }
 
     suspend fun wipeEverything() = withContext(Dispatchers.IO) {

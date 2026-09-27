@@ -36,13 +36,15 @@ import kotlin.math.sin
 
 /** Le grand bouton de dictée : une sphère qui respire. */
 @Composable
-fun Orb(size: Dp = 220.dp, level: Float = 0f, onClick: () -> Unit) {
+fun Orb(size: Dp = 220.dp, level: Float = 0f, listening: Boolean = false, onClick: () -> Unit) {
     val t = rememberInfiniteTransition(label = "orb")
+    val interaction = remember { MutableInteractionSource() }
+    val view = androidx.compose.ui.platform.LocalView.current
     val breath by t.animateFloat(0f, 1f, infiniteRepeatable(tween(2600), RepeatMode.Reverse), label = "b")
     val spin by t.animateFloat(0f, 360f, infiniteRepeatable(tween(14000, easing = LinearEasing)), label = "s")
     Box(
-        Modifier.size(size).clip(CircleShape)
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick),
+        Modifier.size(size).pressScale(interaction, 0.94f).clip(CircleShape)
+            .clickable(interactionSource = interaction, indication = null) { Feedback.tap(view); onClick() },
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.fillMaxSize()) {
@@ -67,8 +69,10 @@ fun Orb(size: Dp = 220.dp, level: Float = 0f, onClick: () -> Unit) {
                 path.close()
                 drawPath(path, Brush.linearGradient(listOf(M.Peach, Color(0xFFE9B4F0), M.Lilac), Offset(c.x - core, c.y - core), Offset(c.x + core, c.y + core)))
             }
-            drawCircle(M.Text.copy(alpha = 0.10f), core * 1.22f, c, style = Stroke(1.2f.dp.toPx()))
-            drawCircle(M.Text.copy(alpha = 0.05f), core * 1.42f, c, style = Stroke(1f.dp.toPx()))
+            // anneaux : ils s'écartent avec la voix quand l'écoute passive est armée
+            val spread = if (listening) level * 0.25f else 0f
+            drawCircle((if (listening) M.Peach else M.Text).copy(alpha = 0.10f + spread * 0.6f), core * (1.22f + spread), c, style = Stroke(1.2f.dp.toPx()))
+            drawCircle((if (listening) M.Peach else M.Text).copy(alpha = 0.05f + spread * 0.4f), core * (1.42f + spread * 1.6f), c, style = Stroke(1f.dp.toPx()))
         }
         Icon(Icons.Rounded.Mic, "Parler", tint = M.Ink, modifier = Modifier.size(size * 0.2f))
     }

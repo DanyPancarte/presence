@@ -38,12 +38,57 @@ data class FolderEntity(
     val emoji: String? = null,
 )
 
+object CaptureStatus {
+    const val PENDING = "pending"
+    const val DONE = "done"
+}
+
+/** Une session de dictée brute. Elle produit 0..n notes, tâches, rendez-vous et un mood. */
+@Entity(tableName = "captures", indices = [Index("createdAt"), Index("status")])
+data class CaptureEntity(
+    @PrimaryKey val id: String,
+    val transcript: String,
+    val createdAt: Long,
+    val dayKey: String,
+    val durationSec: Int,
+    val isDaily: Boolean,
+    val mood: Int? = null,
+    val status: String = CaptureStatus.PENDING,
+    /** Proposition IA complète (JSON SessionProposal), jamais appliquée sans accord. */
+    val proposalJson: String? = null,
+    val timeOfDay: String = "",
+)
+
+object EventStatus {
+    const val SUGGESTED = "suggested"
+    const val CONFIRMED = "confirmed"
+    const val DISMISSED = "dismissed"
+}
+
+/** Élément d'agenda repéré à l'oral (« rendez-vous jeudi 14h avec Marc »). */
+@Entity(tableName = "events", indices = [Index("startAt"), Index("status"), Index("noteId")])
+data class EventEntity(
+    @PrimaryKey val id: String,
+    val noteId: String?,
+    val captureId: String?,
+    val title: String,
+    /** ISO local yyyy-MM-dd'T'HH:mm, ou date seule yyyy-MM-dd si l'heure est inconnue. */
+    val startAt: String,
+    val allDay: Boolean,
+    val where: String? = null,
+    val withWho: String = "",
+    val status: String = EventStatus.SUGGESTED,
+    val reason: String = "",
+    val createdAt: Long,
+)
+
 @Entity(
     tableName = "notes",
-    indices = [Index("folderId"), Index("createdAt"), Index("dayKey")],
+    indices = [Index("folderId"), Index("createdAt"), Index("dayKey"), Index("captureId")],
 )
 data class NoteEntity(
     @PrimaryKey val id: String,
+    val captureId: String? = null,
     val title: String,
     val body: String,
     val rawTranscript: String,
@@ -99,6 +144,7 @@ data class NoteLink(
 data class TaskEntity(
     @PrimaryKey val id: String,
     val noteId: String?,
+    val captureId: String? = null,
     val text: String,
     val dueDate: String? = null,
     val status: String = TaskStatus.SUGGESTED,

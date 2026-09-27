@@ -9,9 +9,9 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 @Database(
     entities = [
         FolderEntity::class, NoteEntity::class, MentionEntity::class, NoteMention::class,
-        NoteLink::class, TaskEntity::class, ReportEntity::class,
+        NoteLink::class, TaskEntity::class, ReportEntity::class, CaptureEntity::class, EventEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 abstract class MurmureDb : RoomDatabase() {

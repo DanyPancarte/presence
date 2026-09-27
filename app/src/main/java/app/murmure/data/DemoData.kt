@@ -3,6 +3,8 @@ package app.murmure.data
 import app.murmure.ai.EntityGuess
 import app.murmure.ai.TaskGuess
 import app.murmure.core.Dates
+import app.murmure.ai.Moment
+import app.murmure.ai.MomentKind
 import app.murmure.core.Text
 import java.time.LocalDate
 
@@ -131,6 +133,18 @@ object DemoData {
                 ),
             )
         }
+        // Quelques rendez-vous à venir + une dictée en attente de validation
+        val ev = listOf(
+            Triple("Point Atlas avec Marc", today.plusDays(1).atTime(10, 0).toString().take(16), false),
+            Triple("Souper chez Julie", today.plusDays(2).atTime(18, 30).toString().take(16), false),
+            Triple("Gym", today.toString(), true),
+        )
+        ev.forEach { (t, at, allDay) ->
+            repo.dao.upsertEvent(EventEntity(Text.uuid(), null, null, t, at, allDay, null, "", EventStatus.CONFIRMED, "Exemple", System.currentTimeMillis()))
+        }
+        val pendingText = "Bonjour, une note pour le dossier Projet Atlas. Avec Marc on a revu la maquette, faut que j'envoie le brief demain. " +
+            "Nouvelle note : idées pour le studio de Julie, un nom court et des ateliers le samedi. Rendez-vous jeudi 14h avec Julie au café. Je me sens motivé."
+        repo.saveCapture(pendingText, 74, false, null, app.murmure.ai.LocalBrain.detectMoments(pendingText))
         // Réalisme : les vieilles tâches sont faites, une seule reste en retard.
         val overdue = repo.dao.allTasks().filter { t -> Dates.parseDay(t.dueDate)?.isBefore(today) == true }.sortedBy { it.dueDate }
         overdue.dropLast(1).forEach { repo.dao.setTaskStatus(it.id, TaskStatus.DONE) }

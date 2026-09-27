@@ -39,6 +39,13 @@ open class MurmureApp : Application(), Configuration.Provider {
         settings = SettingsStore(this, vault)
         client = GeminiClient(GeminiClient.defaultHttp())
         analyzer = NoteAnalyzer(client)
+        app.murmure.ui.components.Feedback.init(this)
+        appScope.launch {
+            settings.state.collect { s ->
+                app.murmure.ui.components.Feedback.soundsEnabled = s.sounds
+                app.murmure.ui.components.Feedback.hapticsEnabled = s.haptics
+            }
+        }
         getSystemService(NotificationManager::class.java).createNotificationChannels(
             listOf(
                 NotificationChannel(DailyReminder.CHANNEL, "Rituel quotidien", NotificationManager.IMPORTANCE_DEFAULT).apply {

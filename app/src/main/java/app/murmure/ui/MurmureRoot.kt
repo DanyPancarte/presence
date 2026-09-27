@@ -5,6 +5,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -55,6 +56,7 @@ import app.murmure.ui.note.NoteScreen
 import app.murmure.ui.onboarding.OnboardingScreen
 import app.murmure.ui.portrait.PortraitScreen
 import app.murmure.ui.review.ReviewScreen
+import app.murmure.ui.review.NoteReviewScreen
 import app.murmure.ui.settings.SettingsScreen
 import app.murmure.ui.tasks.TasksScreen
 import app.murmure.ui.theme.M
@@ -68,6 +70,7 @@ object Routes {
     const val ONBOARDING = "onboarding"
     fun record(daily: Boolean = false) = "record?daily=$daily"
     fun review(id: String) = "review/$id"
+    fun reclass(id: String) = "reclass/$id"
     fun note(id: String) = "note/$id"
     fun folder(id: String) = "folder/$id"
 }
@@ -77,7 +80,7 @@ private data class Tab(val route: String, val label: String, val icon: ImageVect
 private val tabs = listOf(
     Tab(Routes.HOME, "Dicter", Icons.Rounded.GraphicEq),
     Tab(Routes.EXPLORE, "Explorer", Icons.Rounded.Hub),
-    Tab(Routes.TASKS, "Tâches", Icons.Rounded.CheckCircle),
+    Tab(Routes.TASKS, "Agenda", Icons.Rounded.CheckCircle),
     Tab(Routes.PORTRAIT, "Portrait", Icons.Rounded.AutoAwesome),
 )
 
@@ -98,7 +101,13 @@ fun MurmureRoot(openRitual: Boolean, onRitualHandled: () -> Unit) {
     }
 
     Box(Modifier.fillMaxSize().background(M.Ink)) {
-        NavHost(nav, startDestination = start, modifier = Modifier.fillMaxSize()) {
+        NavHost(
+            nav, startDestination = start, modifier = Modifier.fillMaxSize(),
+            enterTransition = { fadeIn(tween(260)) + slideInVertically(tween(320)) { it / 14 } },
+            exitTransition = { fadeOut(tween(180)) },
+            popEnterTransition = { fadeIn(tween(220)) },
+            popExitTransition = { fadeOut(tween(180)) + slideOutVertically(tween(260)) { it / 14 } },
+        ) {
             composable(Routes.ONBOARDING) {
                 OnboardingScreen(onDone = {
                     nav.navigate(Routes.HOME) { popUpTo(Routes.ONBOARDING) { inclusive = true } }
@@ -114,6 +123,7 @@ fun MurmureRoot(openRitual: Boolean, onRitualHandled: () -> Unit) {
                 arguments = listOf(navArgument("daily") { type = NavType.BoolType; defaultValue = false }),
             ) { e -> Frame { RecordScreen(nav, daily = e.arguments?.getBoolean("daily") == true) } }
             composable("review/{id}") { e -> Frame { ReviewScreen(nav, e.arguments?.getString("id")!!) } }
+            composable("reclass/{id}") { e -> Frame { NoteReviewScreen(nav, e.arguments?.getString("id")!!) } }
             composable("note/{id}") { e -> Frame { NoteScreen(nav, e.arguments?.getString("id")!!) } }
             composable("folder/{id}") { e -> Frame { FolderScreen(nav, e.arguments?.getString("id")!!) } }
         }
@@ -139,6 +149,7 @@ private fun TabFrame(content: @Composable () -> Unit) {
 
 @Composable
 private fun BottomBar(nav: NavHostController, route: String?) {
+    val view = androidx.compose.ui.platform.LocalView.current
     Row(
         Modifier
             .fillMaxWidth()
@@ -158,6 +169,7 @@ private fun BottomBar(nav: NavHostController, route: String?) {
                     .clip(RoundedCornerShape(20.dp))
                     .background(if (selected) M.Lilac.copy(alpha = 0.16f) else M.Surface)
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
+                        app.murmure.ui.components.Feedback.tap(view)
                         if (!selected) nav.navigate(tab.route) {
                             popUpTo(Routes.HOME) { saveState = true }
                             launchSingleTop = true

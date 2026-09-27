@@ -14,9 +14,9 @@
 
 ## ⬇️ Installer l'APK (2 min)
 
-1. Récupère **`dist/murmure-1.0.0.apk`** (ou l'artefact `murmure-apk` de la CI GitHub Actions).
+1. Récupère **`dist/murmure-1.1.0.apk`** (ou l'artefact `murmure-apk` de la CI GitHub Actions).
 2. Sur le téléphone : ouvre le fichier → Android demande d'**autoriser l'installation d'applis inconnues** pour ton navigateur / gestionnaire de fichiers → *Autoriser* → *Installer*.
-   - Par câble : `adb install dist/murmure-1.0.0.apk`
+   - Par câble : `adb install dist/murmure-1.1.0.apk`
 3. Android 8.0+ (API 26). Testé en build pour `arm64-v8a`, `armeabi-v7a`, `x86_64`.
 
 ## 🔑 Brancher l'IA (clé Google Gemini)
@@ -36,6 +36,15 @@
 **Filet de sécurité** : si Gemini Live est refusé (clé, quota, modèle), la session bascule en *segments*, puis sur l'*appareil* — **l'audio déjà capté est rejoué, rien n'est perdu** (couvert par `VoiceSessionTest`).
 
 > La clé est chiffrée sur l'appareil (Android Keystore). Sans clé, l'app fonctionne quand même en mode appareil avec un classement proposé localement.
+
+## 🧠 Nouveau en 1.1 — le cerveau live
+
+- **Moments** : pendant que tu parles, chaque fragment signifiant est typé et mis de côté en direct — *note*, *tâche*, *agenda*, *mood*, *idée* — avec une carte qui glisse dans l'écran (« Tâche repérée », « Ajouté à l'agenda »), une vibration double et un blip. Passe locale instantanée (regex FR-QC) + passe IA toutes les ~7 s (sujet, charge émotionnelle, insight).
+- **Une dictée = plusieurs choses** : l'écran « Ce que j'ai retenu » découpe en N notes, tâches, rendez-vous et mood. « Tout valider · n » en un tap ; chaque élément reste modifiable.
+- **Écoute sans bouton** : sur l'accueil, commence à parler — la dictée démarre seule avec les 2 dernières secondes déjà captées (désactivable dans Réglages).
+- **Aura plein écran** qui respire avec ta voix et prend la teinte de l'émotion perçue ; bandeau *Dossier · Sujet · Émotion* ; insight en direct.
+- **Feeling** : sons courts (début, fin, moment, succès), retours haptiques, boutons qui s'enfoncent, tooltips sur les icônes, transitions d'écran.
+- **Agenda** : onglet regroupant tâches et rendez-vous à venir ; insight du jour sur l'accueil.
 
 ## 🧭 Parcours
 

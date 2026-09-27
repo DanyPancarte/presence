@@ -24,10 +24,27 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import android.Manifest
+import android.content.pm.PackageManager
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import app.murmure.ui.components.Feedback
+import app.murmure.ui.components.IconAction
+import app.murmure.ui.components.PulsingDot
+import app.murmure.voice.WakeListener
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -38,6 +55,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.platform.LocalView
+import app.murmure.ui.components.pressScale
 import androidx.navigation.NavHostController
 import app.murmure.MurmureApp
 import app.murmure.ai.NoteTypes
@@ -56,19 +76,44 @@ import java.time.LocalTime
 fun HomeScreen(nav: NavHostController) {
     val app = MurmureApp.instance
     val notes by app.repo.notes.collectAsState(initial = emptyList())
+    val pendingCaptures by app.repo.pendingCaptures.collectAsState(initial = emptyList())
     val settings by app.settings.state.collectAsState()
     val (streak, _) = remember(notes) { Insights.streak(notes) }
     val dailyDone = notes.any { it.isDaily && it.dayKey == Dates.dayKey() }
-    val pending = notes.filter { it.status == NoteStatus.PENDING }
     val recent = notes.filter { it.status == NoteStatus.FILED }.take(8)
     val hour = LocalTime.now().hour
     val hello = when (hour) { in 5..11 -> "Bon matin."; in 12..17 -> "Bon après-midi."; else -> "Bonsoir." }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    // ---- Insight du jour (calcul local) ----
+    var insight by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(notes.size) { insight = runCatching { app.repo.homeInsight() }.getOrNull() }
+
+    // ---- Écoute passive : on parle, ça démarre ----
+    val hasMic = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+    val wake = remember { WakeListener(scope) { scope.launch(Dispatchers.Main) { Feedback.wake(context); nav.navigate(Routes.record()) { launchSingleTop = true } } } }
+    val wakeLevel by wake.level.collectAsState()
+    val armed by wake.armed.collectAsState()
+    val lifecycle = LocalLifecycleOwner.current
+    DisposableEffect(lifecycle, settings.voiceStart, hasMic) {
+        val obs = LifecycleEventObserver { _, e ->
+            when (e) {
+                Lifecycle.Event.ON_RESUME -> if (settings.voiceStart && hasMic) wake.start()
+                Lifecycle.Event.ON_PAUSE -> wake.stop()
+                else -> {}
+            }
+        }
+        lifecycle.lifecycle.addObserver(obs)
+        if (settings.voiceStart && hasMic && lifecycle.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) wake.start()
+        onDispose { lifecycle.lifecycle.removeObserver(obs); wake.stop() }
+    }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         Row(Modifier.fillMaxWidth().padding(start = 22.dp, end = 8.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Wordmark()
             Spacer(Modifier.weight(1f))
-            IconButton(onClick = { nav.navigate(Routes.SETTINGS) }) { Icon(Icons.Rounded.Settings, "Réglages", tint = M.Muted) }
+            IconAction(Icons.Rounded.Settings, "Réglages") { nav.navigate(Routes.SETTINGS) }
         }
         Column(Modifier.padding(horizontal = 22.dp)) {
             Spacer(Modifier.height(18.dp))
@@ -77,13 +122,22 @@ fun HomeScreen(nav: NavHostController) {
         }
 
         Box(Modifier.fillMaxWidth().padding(vertical = 22.dp), contentAlignment = Alignment.Center) {
-            Orb(size = 250.dp) { nav.navigate(Routes.record()) }
+            Orb(size = 250.dp, level = wakeLevel, listening = armed) { wake.stop(); nav.navigate(Routes.record()) }
         }
-        Text(
-            "Touche et parle. Je m'occupe du reste.",
-            style = MaterialTheme.typography.labelMedium, color = M.Faint,
-            modifier = Modifier.align(Alignment.CenterHorizontally),
-        )
+        Row(Modifier.align(Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
+            if (armed) { PulsingDot(M.Peach, 7.dp); Spacer(Modifier.width(8.dp)) }
+            Text(
+                if (armed) "Je t'écoute. Parle, ou touche." else "Touche et parle. Je m'occupe du reste.",
+                style = MaterialTheme.typography.labelMedium, color = if (armed) M.Peach else M.Faint,
+            )
+        }
+        insight?.let {
+            Spacer(Modifier.height(14.dp))
+            Row(
+                Modifier.padding(horizontal = 22.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(M.Surface).padding(horizontal = 14.dp, vertical = 11.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) { Text(it, style = MaterialTheme.typography.bodySmall, color = M.Text) }
+        }
         if (!settings.hasAiKey) {
             Text(
                 "Mode appareil · ajoute ta clé IA dans Réglages",
@@ -95,19 +149,19 @@ fun HomeScreen(nav: NavHostController) {
 
         RitualCard(done = dailyDone, streak = streak) { nav.navigate(Routes.record(daily = true)) }
 
-        if (pending.isNotEmpty()) {
+        if (pendingCaptures.isNotEmpty()) {
             Spacer(Modifier.height(14.dp))
             Row(
                 Modifier.padding(horizontal = 22.dp).fillMaxWidth().clip(RoundedCornerShape(20.dp))
                     .background(M.Butter.copy(alpha = 0.12f)).border(1.dp, M.Butter.copy(alpha = 0.35f), RoundedCornerShape(20.dp))
-                    .clickable { nav.navigate(Routes.review(pending.first().id)) }.padding(16.dp),
+                    .clickable { nav.navigate(Routes.review(pendingCaptures.first().id)) }.padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text("📥", fontSize = 22.sp)
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("${pending.size} note${if (pending.size > 1) "s" else ""} à classer", style = MaterialTheme.typography.titleMedium, color = M.Text)
-                    Text("Un tap pour valider le classement proposé", style = MaterialTheme.typography.bodySmall, color = M.Muted)
+                    Text("${pendingCaptures.size} dictée${if (pendingCaptures.size > 1) "s" else ""} à valider", style = MaterialTheme.typography.titleMedium, color = M.Text)
+                    Text(pendingCaptures.first().transcript.take(70) + "…", style = MaterialTheme.typography.bodySmall, color = M.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 Icon(Icons.Rounded.ChevronRight, null, tint = M.Butter)
             }
@@ -140,14 +194,16 @@ fun Wordmark() {
 @Composable
 private fun RitualCard(done: Boolean, streak: Int, onClick: () -> Unit) {
     val shape = RoundedCornerShape(26.dp)
+    val interaction = remember { MutableInteractionSource() }
+    val view = LocalView.current
     Row(
-        Modifier.padding(horizontal = 22.dp).fillMaxWidth().clip(shape)
+        Modifier.padding(horizontal = 22.dp).fillMaxWidth().pressScale(interaction, 0.97f).clip(shape)
             .background(
                 if (done) Brush.linearGradient(listOf(M.Mint.copy(alpha = 0.20f), M.Mint.copy(alpha = 0.05f)))
                 else Brush.linearGradient(listOf(M.Peach.copy(alpha = 0.30f), M.Lilac.copy(alpha = 0.18f)))
             )
             .border(1.dp, (if (done) M.Mint else M.Peach).copy(alpha = 0.4f), shape)
-            .clickable(onClick = onClick)
+            .clickable(interactionSource = interaction, indication = null) { Feedback.tap(view); onClick() }
             .padding(18.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

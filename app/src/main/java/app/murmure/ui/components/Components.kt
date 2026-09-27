@@ -22,7 +22,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material.icons.Icons
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -30,6 +37,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -78,12 +86,15 @@ fun Tag(
     onClick: (() -> Unit)? = null,
 ) {
     val shape = RoundedCornerShape(50)
+    val interaction = remember { MutableInteractionSource() }
+    val view = LocalView.current
     Row(
         modifier
+            .then(if (onClick != null) Modifier.pressScale(interaction, 0.93f) else Modifier)
             .clip(shape)
             .background(if (selected) color.copy(alpha = 0.18f) else Color.Transparent)
             .border(1.dp, if (selected) color.copy(alpha = 0.55f) else M.Line, shape)
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .then(if (onClick != null) Modifier.clickable(interactionSource = interaction, indication = null) { Feedback.tap(view); onClick() } else Modifier)
             .padding(horizontal = 12.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -120,7 +131,7 @@ fun TopBar(
         Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp).height(52.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (onBack != null) IconButton(onClick = onBack) { Icon(backIcon, "Retour", tint = M.Text) }
+        if (onBack != null) IconAction(backIcon, "Retour", onClick = onBack)
         else Spacer(Modifier.width(12.dp))
         Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
         actions()
@@ -137,11 +148,14 @@ fun PrimaryButton(
     onClick: () -> Unit,
 ) {
     val shape = RoundedCornerShape(20.dp)
+    val interaction = remember { MutableInteractionSource() }
+    val view = LocalView.current
     Row(
         modifier
+            .pressScale(interaction)
             .clip(shape)
             .background(if (enabled) color else M.Surface2)
-            .clickable(enabled = enabled, onClick = onClick)
+            .clickable(enabled = enabled, interactionSource = interaction, indication = null) { Feedback.tap(view); Feedback.play(Feedback.Sound.TAP, 0.45f); onClick() }
             .padding(horizontal = 22.dp, vertical = 16.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
@@ -154,8 +168,12 @@ fun PrimaryButton(
 @Composable
 fun GhostButton(text: String, modifier: Modifier = Modifier, color: Color = M.Text, leading: ImageVector? = null, onClick: () -> Unit) {
     val shape = RoundedCornerShape(20.dp)
+    val interaction = remember { MutableInteractionSource() }
+    val view = LocalView.current
     Row(
-        modifier.clip(shape).border(1.dp, M.Line, shape).clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 15.dp),
+        modifier.pressScale(interaction).clip(shape).border(1.dp, M.Line, shape)
+            .clickable(interactionSource = interaction, indication = null) { Feedback.tap(view); onClick() }
+            .padding(horizontal = 20.dp, vertical = 15.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -211,3 +229,18 @@ fun StatTile(value: String, label: String, color: Color, modifier: Modifier = Mo
 
 val moodFaces = listOf("😣", "😕", "😐", "🙂", "😄")
 val moodLabels = listOf("Dur", "Bof", "Correct", "Bien", "Super")
+
+
+/** Bouton icône avec infobulle (appui long) et retour haptique. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun IconAction(icon: ImageVector, label: String, tint: Color = M.Muted, onClick: () -> Unit) {
+    val view = LocalView.current
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = { PlainTooltip(containerColor = M.Surface2, contentColor = M.Text) { Text(label, style = MaterialTheme.typography.labelMedium) } },
+        state = rememberTooltipState(),
+    ) {
+        IconButton(onClick = { Feedback.tap(view); onClick() }) { Icon(icon, label, tint = tint) }
+    }
+}

@@ -94,16 +94,135 @@ Règles :
         )
     }
 
-    /** Détection rapide de mots-clés pendant la dictée. */
-    suspend fun liveKeywords(settings: AppSettings, text: String, folders: List<String>): LiveKeywords {
+    /**
+     * Passe « live » pendant la dictée : sujet, charge émotionnelle, dossier annoncé,
+     * mots-clés et MOMENTS (notes, tâches, agenda, moods, idées) avec leurs plages de texte.
+     */
+    suspend fun liveAnalysis(settings: AppSettings, text: String, folders: List<String>, known: List<String>): LiveAnalysis {
+        val window = text.takeLast(2200)
+        val offset = text.length - window.length
         val prompt = """
-Extrait de dictée en cours : ""${'"'}${text.takeLast(1500)}""${'"'}
-Dossiers existants : ${folders.joinToString(", ")}
-Renvoie en JSON {"keywords":[{"text":"mot ou groupe de mots EXACTEMENT tel qu'écrit dans l'extrait","kind":"person|place|activity|project|concept"}], "folder": "dossier annoncé explicitement par la personne ou null"}.
-Maximum 8 mots-clés, les plus signifiants (noms propres, projets, thèmes). Pas de mots vides.
+Date/heure : ${Dates.nowIso()} (${Dates.weekday()}). Aujourd'hui = ${Dates.today()}.
+Dossiers existants : ${folders.joinToString(", ").ifBlank { "(aucun)" }}
+Entités connues : ${known.take(60).joinToString(", ").ifBlank { "(aucune)" }}
+
+Dictée en cours (fenêtre récente) :
+${"\"\"\""}$window${"\"\"\""}
+
+Analyse ce flux de parole et renvoie UNIQUEMENT ce JSON :
+{
+ "topic": "de quoi la personne parle en ce moment, 2-5 mots, ou null",
+ "valence": -1.0..1.0,
+ "energy": "basse|moyenne|haute",
+ "emotion": "${Emotions.all.joinToString("|")}",
+ "folder": "dossier annoncé explicitement (« note pour le dossier X ») ou null",
+ "keywords": [{"text":"mot ou groupe EXACTEMENT tel qu'écrit dans la fenêtre","kind":"person|place|activity|project|concept"}],
+ "moments": [{
+   "id": "m1", "kind": "note|task|event|mood|idea",
+   "title": "titre court (≤ 8 mots)",
+   "text": "citation EXACTE du passage dans la fenêtre (début de la phrase, ≤ 120 caractères)",
+   "due": "tâche : YYYY-MM-DD ou null · event : YYYY-MM-DDTHH:MM ou YYYY-MM-DD · sinon null",
+   "allDay": true|false, "where": "lieu ou null", "who": ["personnes"],
+   "emotion": "pour mood, sinon null", "mood": 1-5 pour mood sinon null,
+   "folder": "pour note : dossier annoncé ou suggéré, sinon null",
+   "confidence": 0.0-1.0
+ }],
+ "insight": "UNE observation utile et courte (≤ 90 caractères) ou null — ex. lien avec une entité connue, répétition, contradiction, encouragement. Pas de conseil clinique."
+}
+Règles :
+- "note" = la personne ouvre explicitement un nouveau sujet à conserver (« nouvelle note », « une note pour… », changement net de sujet).
+- "task" = action à faire formulée par la personne. "event" = rendez-vous / rencontre avec un moment précis.
+- "mood" = état émotionnel déclaré (« je me sens… »). "idea" = idée, envie, projet flou.
+- Maximum 6 moments, 8 mots-clés. N'invente rien.
 """.trimIndent()
-        val raw = client.generate(settings.apiKey, settings.textModel, prompt, jsonMode = true, temperature = 0.1)
-        return json.decodeFromString(LiveKeywords.serializer(), extractJson(raw))
+        val raw = client.generate(settings.apiKey, settings.textModel, prompt, jsonMode = true, temperature = 0.15)
+        val la = json.decodeFromString(LiveAnalysis.serializer(), extractJson(raw))
+        // Ancre chaque moment à sa position réelle dans le texte complet.
+        val anchored = la.moments.mapIndexed { i, m ->
+            val idx = if (m.text.isNotBlank()) window.indexOf(m.text.take(40)) else -1
+            val start = if (idx >= 0) offset + idx else -1
+            m.copy(
+                id = "a:${m.kind}:${if (start >= 0) start else "n$i"}",
+                start = start, end = if (start >= 0) start + m.text.length else -1,
+                kind = m.kind.takeIf { it in listOf("note", "task", "event", "mood", "idea") } ?: "note",
+                emotion = m.emotion?.takeIf { it in Emotions.all }, byAi = true,
+            )
+        }
+        return la.copy(
+            moments = anchored,
+            emotion = la.emotion.takeIf { it in Emotions.all } ?: "neutre",
+            energy = la.energy.takeIf { it in Energy.all } ?: "moyenne",
+            folder = la.folder?.takeIf { it.isNotBlank() && it != "null" },
+            topic = la.topic?.takeIf { it.isNotBlank() && it != "null" },
+            insight = la.insight?.takeIf { it.isNotBlank() && it != "null" },
+        )
+    }
+
+    /**
+     * Analyse de fin de capture : découpe en N notes structurées + tâches + agenda + mood.
+     * Les [moments] repérés en direct servent d'indices.
+     */
+    suspend fun analyzeCapture(settings: AppSettings, transcript: String, ctx: AnalysisContext, moments: List<Moment>): SessionProposal {
+        val today = Dates.today()
+        val hints = moments.joinToString("\n") { "- [${it.kind}] ${it.title}${it.due?.let { d -> " ($d)" } ?: ""}" }.ifBlank { "(aucun)" }
+        val prompt = buildString {
+            appendLine("Date et heure : ${Dates.nowIso()} (${Dates.weekday()}). Aujourd'hui = $today. Moment : ${Dates.timeOfDay()}.")
+            if (ctx.isDaily) appendLine("Contexte : NOTE QUOTIDIENNE (rituel « raconte ta journée »). Humeur déclarée : ${ctx.mood ?: "?"}/5. La première note est le journal du jour (type journal, dossier Journal).")
+            appendLine("Dossiers existants : ${ctx.folders.joinToString(", ").ifBlank { "(aucun)" }}")
+            appendLine("Entités connues : ${ctx.entities.take(80).joinToString(", ") { "${it.first} (${it.second})" }.ifBlank { "(aucune)" }}")
+            appendLine("Titres de notes existantes : ${ctx.recentTitles.take(60).joinToString(" | ").ifBlank { "(aucune)" }}")
+            appendLine("Moments repérés pendant la dictée (indices, à confirmer) :\n$hints")
+            appendLine()
+            appendLine("DICTÉE BRUTE :")
+            appendLine("\"\"\"$transcript\"\"\"")
+            appendLine()
+            appendLine(
+                """
+Découpe cette dictée en ce qu'elle contient réellement et renvoie UNIQUEMENT ce JSON :
+{
+ "notes": [ { ...NOTE... } ],
+ "tasks": [{"text": "action à l'infinitif", "due": "YYYY-MM-DD ou null", "reason": "indice dans la dictée"}],
+ "events": [{"id":"e1","kind":"event","title":"…","text":"passage cité","due":"YYYY-MM-DDTHH:MM ou YYYY-MM-DD","allDay":true|false,"where":"lieu ou null","who":["personnes"],"confidence":0.0-1.0}],
+ "mood": 1-5 ou null (état général exprimé, seulement si la personne en parle),
+ "moodEmotion": "${Emotions.all.joinToString("|")} ou null",
+ "insight": "UNE observation courte et utile sur l'ensemble (≤ 120 caractères), descriptive, jamais un verdict"
+}
+Chaque NOTE :
+{
+ "title": "titre court et évocateur (max 7 mots)",
+ "summary": "1-2 phrases",
+ "body": "Markdown : paragraphes courts, puces, ## si utile ; sans tics de langage ni annonce de contexte ; [[ ]] autour des personnes, projets, concepts et titres de notes existantes",
+ "declaredFolder": "dossier annoncé pour cette note ou null",
+ "folderSuggestions": [{"name":"…","existing":true|false,"reason":"…","confidence":0.0-1.0}],
+ "type": "journal|travail|personnel|reflexion|idee|descriptif|tache",
+ "emotion": {"label":"…","intensity":0.0-1.0,"valence":-1.0..1.0},
+ "energy": "basse|moyenne|haute",
+ "entities": [{"name":"…","kind":"person|place|activity|project","sentiment":-1.0..1.0}],
+ "keywords": ["5-8 concepts"],
+ "links": ["titres EXACTS de notes existantes liées"],
+ "tasks": []
+}
+Règles :
+- UNE note par sujet distinct (une dictée de 5 minutes peut en contenir 1 à 4). Ne crée pas de note pour une simple tâche ou un simple rendez-vous.
+- Tout le contenu doit se retrouver dans une note ; rien n'est perdu.
+- folderSuggestions : privilégie les dossiers existants (orthographe exacte) ; 1 à 3 options triées.
+- tasks au niveau racine (pas dans les notes). Échéances réalistes d'après les indices ; sinon null.
+- Réutilise l'orthographe des entités connues.
+""".trimIndent()
+            )
+        }
+        val raw = client.generate(settings.apiKey, settings.textModel, prompt, system, jsonMode = true, temperature = 0.3)
+        val sp = json.decodeFromString(SessionProposal.serializer(), extractJson(raw))
+        val notes = sp.notes.ifEmpty { listOf(NoteProposal(body = transcript)) }.map { sanitize(it, transcript, ctx) }
+        return sp.copy(
+            notes = notes,
+            events = sp.events.filter { it.title.isNotBlank() && !it.due.isNullOrBlank() }
+                .mapIndexed { i, e -> e.copy(id = "a:event:$i", kind = MomentKind.EVENT, byAi = true) },
+            moodEmotion = sp.moodEmotion?.takeIf { it in Emotions.all },
+            mood = sp.mood?.coerceIn(1, 5),
+            insight = sp.insight?.takeIf { it.isNotBlank() && it != "null" },
+            byAi = true,
+        )
     }
 
     companion object {

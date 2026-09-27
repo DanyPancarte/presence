@@ -24,6 +24,9 @@ data class AppSettings(
     val reminderMinutes: Int = 20 * 60 + 30,
     val onboarded: Boolean = false,
     val liveHighlights: Boolean = true,
+    val voiceStart: Boolean = true,
+    val sounds: Boolean = true,
+    val haptics: Boolean = true,
 ) {
     val hasAiKey get() = apiKey.isNotBlank()
 
@@ -50,6 +53,9 @@ class SettingsStore(context: Context, private val vault: Vault) {
         reminderMinutes = prefs.getInt("reminder_min", 20 * 60 + 30),
         onboarded = prefs.getBoolean("onboarded", false),
         liveHighlights = prefs.getBoolean("live_hl", true),
+        voiceStart = prefs.getBoolean("voice_start", true),
+        sounds = prefs.getBoolean("sounds", true),
+        haptics = prefs.getBoolean("haptics", true),
     )
 
     fun update(block: (AppSettings) -> AppSettings) {
@@ -66,6 +72,9 @@ class SettingsStore(context: Context, private val vault: Vault) {
             .putInt("reminder_min", new.reminderMinutes)
             .putBoolean("onboarded", new.onboarded)
             .putBoolean("live_hl", new.liveHighlights)
+            .putBoolean("voice_start", new.voiceStart)
+            .putBoolean("sounds", new.sounds)
+            .putBoolean("haptics", new.haptics)
             .apply()
         _state.value = new.copy(apiKey = new.apiKey.trim(), cloudSttKey = new.cloudSttKey.trim())
     }

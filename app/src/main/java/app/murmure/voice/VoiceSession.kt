@@ -68,8 +68,9 @@ class VoiceSession(
         }
     }
 
-    fun start() {
+    fun start(preroll: List<ByteArray> = emptyList()) {
         plan = ArrayDeque(buildPlan())
+        synchronized(replay) { replay.clear(); preroll.forEach { replay.addLast(it) } }
         _state.value = VoiceState(phase = Phase.STARTING, startedAt = System.currentTimeMillis())
         next(null)
     }
@@ -108,6 +109,7 @@ class VoiceSession(
         when (e) {
             Engine.DEVICE -> {
                 stopCapture()
+                if (!anyText) synchronized(replay) { replay.clear() } // l'appareil ne relit pas le PCM
                 device = DeviceEngine(context, settings.language, sink).also { it.start() }
             }
             else -> {
@@ -120,7 +122,7 @@ class VoiceSession(
                 }
                 engine = eng
                 eng.start()
-                // Rejoue l'audio déjà capté si le moteur précédent n'a rien rendu.
+                // Rejoue l'audio déjà capté (pré-roll de l'accueil, ou moteur précédent muet).
                 if (!anyText) synchronized(replay) { replay.forEach { eng.feed(it, 0.05f) } }
                 if (capture == null) startCapture()
             }
