@@ -41,38 +41,65 @@ class Speech(private val context: Context) {
 
     val available get() = SpeechRecognizer.isRecognitionAvailable(context)
 
-    fun listen(onResult: (String) -> Unit, onError: (String) -> Unit, onEnd: () -> Unit = {}) {
-        stopListening()
-        val r = SpeechRecognizer.createSpeechRecognizer(context)
-        recognizer = r
+    private var listener: RecognitionListener? = null
+
+    /** One recognizer for the whole session (recreating it per utterance makes the service drop: error 11). */
+    private fun recognizer(): SpeechRecognizer {
+        recognizer?.let { return it }
+        val r = if (SpeechRecognizer.isOnDeviceRecognitionAvailable(context)) SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
+        else SpeechRecognizer.createSpeechRecognizer(context)
         r.setRecognitionListener(object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) = Unit
             override fun onBeginningOfSpeech() = onBegin()
             override fun onRmsChanged(rmsdB: Float) = onLevel(rmsdB)
+            override fun onBufferReceived(buffer: ByteArray?) = Unit
+            override fun onEndOfSpeech() = Unit
+            override fun onError(error: Int) {
+                val l = listener ?: return
+                listener = null
+                if (error == SpeechRecognizer.ERROR_SERVER_DISCONNECTED || error == SpeechRecognizer.ERROR_CLIENT) {
+                    // Service gone: drop this instance, the next listen() rebuilds it.
+                    recognizer?.destroy(); recognizer = null
+                }
+                l.onError(error)
+            }
+            override fun onResults(results: Bundle?) { val l = listener ?: return; listener = null; l.onResults(results) }
+            override fun onPartialResults(partialResults: Bundle?) { listener?.onPartialResults(partialResults) }
+            override fun onEvent(eventType: Int, params: Bundle?) = Unit
+        })
+        recognizer = r
+        return r
+    }
+
+    fun listen(onResult: (String) -> Unit, onError: (String) -> Unit, onEnd: () -> Unit = {}) {
+        listener = object : RecognitionListener {
+            override fun onReadyForSpeech(params: Bundle?) = Unit
+            override fun onBeginningOfSpeech() = Unit
+            override fun onRmsChanged(rmsdB: Float) = Unit
             override fun onBufferReceived(buffer: ByteArray?) = Unit
             override fun onEndOfSpeech() = onEnd()
             override fun onError(error: Int) {
                 onEnd()
                 val msg = when (error) {
                     SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT, SpeechRecognizer.ERROR_CLIENT,
-                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY, SpeechRecognizer.ERROR_TOO_MANY_REQUESTS -> ""
+                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY, SpeechRecognizer.ERROR_TOO_MANY_REQUESTS, SpeechRecognizer.ERROR_SERVER_DISCONNECTED -> ""
                     SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Permission micro refusée"
                     SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Reconnaissance : réseau"
+                    SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED, SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE -> "Télécharge le pack vocal Français (Canada) hors ligne"
                     else -> "Reconnaissance vocale : erreur $error"
                 }
                 onError(msg)
             }
             override fun onResults(results: Bundle?) {
-                val list = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                val best = list?.firstOrNull()?.trim().orEmpty()
+                val best = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim().orEmpty()
                 if (best.isEmpty()) onError("") else onResult(best)
             }
             override fun onPartialResults(partialResults: Bundle?) {
                 partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.let { if (it.isNotBlank()) onPartial(it) }
             }
             override fun onEvent(eventType: Int, params: Bundle?) = Unit
-        })
-        r.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+        }
+        recognizer().startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "fr-CA")
             putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
@@ -84,8 +111,8 @@ class Speech(private val context: Context) {
     }
 
     fun stopListening() {
-        recognizer?.destroy()
-        recognizer = null
+        listener = null
+        recognizer?.cancel()
     }
 
     fun speak(text: String, onDone: () -> Unit = {}) {
@@ -98,6 +125,7 @@ class Speech(private val context: Context) {
 
     fun release() {
         stopListening()
+        recognizer?.destroy(); recognizer = null
         tts?.shutdown()
         tts = null
     }

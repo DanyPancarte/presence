@@ -7,13 +7,12 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -25,10 +24,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -52,54 +52,59 @@ import java.util.Locale
 
 fun Module.color(): Color = ModuleColor.rgb(this).let { Color(it[0], it[1], it[2]) }
 
-// ---- primitives -----------------------------------------------------------------------------
+// ---- type ---------------------------------------------------------------------------------------
 
 @Composable
-fun Label(text: String, color: Color = Cp.yellow, size: Int = 11) = Text(
+fun Label(text: String, color: Color = Cp.yellow, size: Int = 10) = Text(
     text.uppercase(), color = color, maxLines = 1, overflow = TextOverflow.Ellipsis,
-    style = TextStyle(fontFamily = Cp.display, fontWeight = FontWeight.Bold, fontSize = size.sp, letterSpacing = (size * 0.2f).sp),
+    style = TextStyle(fontFamily = Cp.display, fontWeight = FontWeight.Bold, fontSize = size.sp, letterSpacing = (size * 0.24f).sp),
 )
 
 @Composable
-fun Mono(text: String, color: Color = Cp.mute, size: Int = 10) = Text(
-    text, color = color, style = TextStyle(fontFamily = Cp.mono, fontSize = size.sp, letterSpacing = 0.8.sp), maxLines = 1, overflow = TextOverflow.Ellipsis,
+fun Mono(text: String, color: Color = Cp.mute, size: Int = 9) = Text(
+    text, color = color, style = TextStyle(fontFamily = Cp.mono, fontSize = size.sp, letterSpacing = 0.6.sp), maxLines = 1, overflow = TextOverflow.Ellipsis,
 )
 
 @Composable
-fun Body(text: String, color: Color = Cp.ink, size: Int = 14, weight: FontWeight = FontWeight.SemiBold, maxLines: Int = 2) = Text(
+fun Body(text: String, color: Color = Cp.ink, size: Int = 13, weight: FontWeight = FontWeight.SemiBold, maxLines: Int = 1) = Text(
     text, color = color, style = TextStyle(fontFamily = Cp.display, fontWeight = weight, fontSize = size.sp), maxLines = maxLines, overflow = TextOverflow.Ellipsis,
 )
 
+// ---- HUD primitives -----------------------------------------------------------------------------
+
 /**
- * A small street-sign tooltip: cut corners, coloured rail, tilted in 3D like a panel bolted on a
- * wall. Never wider than 240 dp; the hologram stays visible around it.
+ * A HUD chip: one accent bar, a hairline frame with a cut corner, nearly no fill. One or two lines.
+ * Slightly tilted in 3D so it reads as a sign in space, not a dialog.
  */
 @Composable
-fun Tooltip(
-    title: String, meta: String, accent: Color, modifier: Modifier = Modifier,
-    tiltY: Float = -16f, tiltX: Float = 5f, width: Int = 236, content: @Composable () -> Unit,
-) {
-    val shape = Cp.cut(26f)
+fun Chip(title: String, accent: Color, meta: String = "", modifier: Modifier = Modifier, tilt: Float = -12f, width: Int = 196, content: @Composable () -> Unit) {
     Box(
         modifier
             .width(width.dp)
             .graphicsLayer {
-                rotationY = tiltY; rotationX = tiltX
-                cameraDistance = 9f * density
-                transformOrigin = TransformOrigin(if (tiltY < 0) 1f else 0f, 0.5f)
+                rotationY = tilt; rotationX = 3f
+                cameraDistance = 10f * density
+                transformOrigin = TransformOrigin(if (tilt < 0) 1f else 0f, 0.5f)
             }
-            .clip(shape)
-            .background(Cp.panel)
-            .border(1.dp, accent.copy(alpha = 0.55f), shape),
+            .drawBehind {
+                val cut = 8.dp.toPx()
+                val p = Path().apply {
+                    moveTo(0f, 0f); lineTo(size.width - cut, 0f); lineTo(size.width, cut)
+                    lineTo(size.width, size.height); lineTo(0f, size.height); close()
+                }
+                drawPath(p, Cp.bg.copy(alpha = 0.55f))
+                drawPath(p, accent.copy(alpha = 0.45f), style = Stroke(1.dp.toPx()))
+                drawRect(accent, Offset.Zero, Size(2.dp.toPx(), size.height))
+                // corner tick, bottom-right
+                drawLine(accent, Offset(size.width - 10.dp.toPx(), size.height), Offset(size.width, size.height), 2.dp.toPx())
+            }
+            .padding(start = 9.dp, end = 8.dp, top = 5.dp, bottom = 6.dp),
     ) {
-        Box(Modifier.width(3.dp).fillMaxHeight().background(accent))
-        Column(Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 10.dp)) {
+        Column {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Label(title, accent)
-                Spacer(Modifier.width(8.dp))
-                Mono(meta)
+                if (meta.isNotEmpty()) { Spacer(Modifier.width(6.dp)); Mono(meta) }
             }
-            Spacer(Modifier.height(5.dp))
             content()
         }
     }
@@ -108,11 +113,42 @@ fun Tooltip(
 @Composable
 fun Reveal(visible: Boolean, fromRight: Boolean = true, modifier: Modifier = Modifier, content: @Composable () -> Unit) = AnimatedVisibility(
     visible, modifier = modifier,
-    enter = fadeIn(tween(240)) + slideInHorizontally(tween(280)) { if (fromRight) it / 6 else -it / 6 },
-    exit = fadeOut(tween(220)),
+    enter = fadeIn(tween(200)) + slideInHorizontally(tween(240)) { if (fromRight) it / 5 else -it / 5 },
+    exit = fadeOut(tween(180)),
 ) { content() }
 
-// ---- the overlay layer -----------------------------------------------------------------------
+/** Hairline progress with a tick at the end. */
+@Composable
+fun Line(fraction: Float, accent: Color, dim: Boolean = false) = Canvas(Modifier.fillMaxWidth().height(3.dp)) {
+    drawLine(accent.copy(alpha = 0.15f), Offset(0f, size.height / 2), Offset(size.width, size.height / 2), 1f)
+    val x = size.width * fraction.coerceIn(0f, 1f)
+    drawLine(if (dim) Cp.mute else accent, Offset(0f, size.height / 2), Offset(x, size.height / 2), 1.5.dp.toPx())
+    drawLine(if (dim) Cp.mute else accent, Offset(x, 0f), Offset(x, size.height), 1.dp.toPx())
+}
+
+/** The frame: four corner brackets, top readout, bottom level line. Pure HUD, no fill. */
+@Composable
+fun HudFrame(scene: Scene, state: HoloState, moodColor: Color) {
+    Canvas(Modifier.fillMaxSize()) {
+        val m = 14.dp.toPx(); val l = 18.dp.toPx(); val w = 1.dp.toPx()
+        val c = Cp.cyan.copy(alpha = 0.5f)
+        fun bracket(x: Float, y: Float, sx: Float, sy: Float) {
+            drawLine(c, Offset(x, y), Offset(x + l * sx, y), w)
+            drawLine(c, Offset(x, y), Offset(x, y + l * sy), w)
+        }
+        bracket(m, m, 1f, 1f); bracket(size.width - m, m, -1f, 1f)
+        bracket(m, size.height - m, 1f, -1f); bracket(size.width - m, size.height - m, -1f, -1f)
+        // bottom level line: ticks light up with the voice
+        val y = size.height - m - 6.dp.toPx()
+        val n = 40; val gap = 3.dp.toPx(); val tw = (size.width - 2 * m - gap * (n - 1)) / n
+        for (i in 0 until n) {
+            val lit = i < (state.amp * n).toInt()
+            drawRect(if (lit) moodColor else Cp.mute.copy(alpha = 0.25f), Offset(m + i * (tw + gap), y), Size(tw, if (lit) 4.dp.toPx() else 2.dp.toPx()))
+        }
+    }
+}
+
+// ---- the overlay layer --------------------------------------------------------------------------
 
 @Composable
 fun Overlays(scene: Scene, state: HoloState, dao: PresenceDao, modifier: Modifier = Modifier) {
@@ -120,187 +156,174 @@ fun Overlays(scene: Scene, state: HoloState, dao: PresenceDao, modifier: Modifie
         Mood.VEILLE -> Cp.mute; Mood.ECOUTE -> Cp.cyan; Mood.REFLEXION -> Cp.yellow; Mood.REPONSE -> Cp.ink; Mood.ALERTE -> Cp.red
     }
     Box(modifier) {
-        // Top-left: identity + status strip (what it is doing, right now)
-        Column(Modifier.align(Alignment.TopStart).padding(start = 16.dp, top = 14.dp)) {
+        HudFrame(scene, state, moodColor)
+
+        // Top-left: identity + the current step (one line, previous one faint)
+        Column(Modifier.align(Alignment.TopStart).padding(start = 22.dp, top = 20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.width(2.dp).height(26.dp).background(Cp.yellow))
-                Spacer(Modifier.width(10.dp))
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(6.dp).background(moodColor))
-                        Spacer(Modifier.width(8.dp))
-                        Label("Présence", size = 12)
-                    }
-                    Mono(scene.mood.name.lowercase() + " · " + SimpleDateFormat("HH:mm", Locale.CANADA_FRENCH).format(Date()), size = 9)
-                }
+                Box(Modifier.size(5.dp).background(moodColor))
+                Spacer(Modifier.width(7.dp))
+                Label("Présence", Cp.ink, 11)
+                Spacer(Modifier.width(8.dp))
+                Label(scene.mood.name, moodColor, 9)
             }
-            Spacer(Modifier.height(10.dp))
-            scene.steps.forEach { s ->
+            Spacer(Modifier.height(4.dp))
+            scene.steps.takeLast(2).forEachIndexed { i, s ->
+                val last = i == scene.steps.takeLast(2).lastIndex
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Mono(if (s.done) "✓" else "▸", if (s.done) Cp.mute else moodColor, 10)
-                    Spacer(Modifier.width(6.dp))
-                    Label(s.label, if (s.done) Cp.mute else moodColor, 10)
-                    if (s.detail.isNotEmpty()) { Spacer(Modifier.width(8.dp)); Mono(s.detail, size = 9) }
+                    Mono(if (s.done) "✓" else "▸", if (last && !s.done) moodColor else Cp.mute, 9)
+                    Spacer(Modifier.width(5.dp))
+                    Label(s.label, if (last && !s.done) moodColor else Cp.mute, 9)
+                    if (s.detail.isNotEmpty()) { Spacer(Modifier.width(6.dp)); Mono(s.detail, Cp.mute.copy(alpha = if (last) 1f else 0.6f), 8) }
                 }
             }
         }
 
-        // Right column: live captures (stacked, tilted) then the module tooltip
-        Column(Modifier.align(Alignment.TopEnd).padding(top = 92.dp, end = 12.dp), horizontalAlignment = Alignment.End) {
+        // Top-right: clock
+        Box(Modifier.align(Alignment.TopEnd).padding(end = 22.dp, top = 20.dp)) { Mono(SimpleDateFormat("HH:mm", Locale.CANADA_FRENCH).format(Date()), Cp.mute, 10) }
+
+        // Right column: live captures (chips), then the module chip
+        Column(Modifier.align(Alignment.CenterEnd).padding(end = 14.dp), horizontalAlignment = Alignment.End) {
             scene.detections.take(3).forEachIndexed { i, d ->
                 Reveal(true) {
-                    Tooltip(d.module.name, d.op, d.module.color(), Modifier.padding(bottom = 6.dp, end = (i * 6).dp), width = 180) {
-                        Mono("« ${d.hint} »", d.module.color(), 10)
+                    Chip(d.module.name, d.module.color(), d.op, Modifier.padding(bottom = 5.dp, end = (i * 5).dp), width = 150) {
+                        Mono("« ${d.hint} »", d.module.color(), 9)
                     }
                 }
             }
             Reveal(scene.module != Module.AUCUN) {
-                Box(Modifier.padding(top = 6.dp)) {
+                Box(Modifier.padding(top = 4.dp)) {
                     when (scene.module) {
-                        Module.TACHES -> TasksTip(scene, dao)
-                        Module.NOTES -> NotesTip(scene, dao)
-                        Module.MEDS -> MedsTip(scene, dao)
-                        Module.BUDGET -> BudgetTip(scene, dao)
-                        Module.MOOD -> MoodTip(scene, dao)
-                        Module.AGENDA -> AgendaTip(scene, dao)
+                        Module.TACHES -> TasksChip(scene, dao)
+                        Module.NOTES -> NotesChip(scene, dao)
+                        Module.MEDS -> MedsChip(scene, dao)
+                        Module.BUDGET -> BudgetChip(scene, dao)
+                        Module.MOOD -> MoodChip(scene, dao)
+                        Module.AGENDA -> AgendaChip(scene, dao)
                         Module.AUCUN -> Unit
                     }
                 }
             }
         }
 
-        // Bottom-left: radio while listening, analysis while thinking, alert / error
-        Column(Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = 96.dp)) {
-            Reveal(scene.mood == Mood.ECOUTE, fromRight = false) { RadioTip(scene, state) }
+        // Bottom-left: radio while listening / analysis / error
+        Column(Modifier.align(Alignment.BottomStart).padding(start = 14.dp, bottom = 92.dp)) {
+            Reveal(scene.mood == Mood.ECOUTE, fromRight = false) { RadioChip(scene, state) }
             Reveal(scene.mood == Mood.REFLEXION, fromRight = false) {
-                Tooltip("Analyse", "…", Cp.yellow, tiltY = 16f, tiltX = -4f) { Body(scene.heard, color = Cp.mute, size = 13, weight = FontWeight.Medium) }
+                Chip("Analyse", Cp.yellow, "…", tilt = 12f, width = 210) { Body(scene.heard, color = Cp.mute, size = 12, weight = FontWeight.Medium, maxLines = 2) }
             }
-            Reveal(scene.error.isNotEmpty(), fromRight = false) { Tooltip("Erreur", "cerveau", Cp.red, tiltY = 16f, tiltX = -4f) { Body(scene.error, size = 13, maxLines = 3) } }
+            Reveal(scene.error.isNotEmpty(), fromRight = false) { Chip("Erreur", Cp.red, tilt = 12f, width = 220) { Body(scene.error, size = 12, maxLines = 3) } }
         }
 
         // Bottom: the spoken line
         Reveal(scene.say.isNotEmpty(), modifier = Modifier.align(Alignment.BottomCenter)) {
             Text(
                 scene.say, color = if (scene.mood == Mood.ALERTE) Cp.red else Cp.ink, textAlign = TextAlign.Center, maxLines = 3, overflow = TextOverflow.Ellipsis,
-                style = TextStyle(fontFamily = Cp.display, fontWeight = FontWeight.Medium, fontSize = 18.sp),
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 26.dp),
+                style = TextStyle(fontFamily = Cp.display, fontWeight = FontWeight.Medium, fontSize = 17.sp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp).padding(bottom = 36.dp),
             )
         }
     }
 }
 
 @Composable
-fun RadioTip(scene: Scene, state: HoloState) = Tooltip("Écoute", "fr-CA · 16k", Cp.cyan, tiltY = 16f, tiltX = -4f) {
-    Canvas(Modifier.fillMaxWidth().height(26.dp)) {
+fun RadioChip(scene: Scene, state: HoloState) = Chip("Écoute", Cp.cyan, "fr-CA", tilt = 12f, width = 210) {
+    Canvas(Modifier.fillMaxWidth().height(14.dp)) {
         val b = state.bands
         val gap = 2.dp.toPx(); val w = (size.width - gap * 23) / 24
         for (i in 0 until 24) {
-            val h = (0.05f + b[i] * 0.95f) * size.height
+            val h = (0.08f + b[i] * 0.92f) * size.height
             drawRect(Cp.cyan.copy(alpha = 0.85f), Offset(i * (w + gap), size.height - h), Size(w, h))
         }
     }
-    Spacer(Modifier.height(4.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
-        Body("MIC 01", size = 18, weight = FontWeight.Bold, maxLines = 1)
-        Mono("${(-60 + state.amp * 58).toInt()} dB")
-    }
-    Body(if (scene.heard.isBlank()) "▍" else scene.heard + " ▍", size = 13, weight = FontWeight.Medium, maxLines = 3)
+    Spacer(Modifier.height(3.dp))
+    Body(if (scene.heard.isBlank()) "▍" else scene.heard + " ▍", size = 12, weight = FontWeight.Medium, maxLines = 2)
 }
 
 @Composable
-fun TasksTip(scene: Scene, dao: PresenceDao) {
+fun TasksChip(scene: Scene, dao: PresenceDao) {
     val tasks by dao.tasks().collectAsState(emptyList())
     val c = Module.TACHES.color()
-    Tooltip("Tâches · 97 %", scene.moduleOp, c) {
-        if (tasks.isEmpty()) Body("Aucun projet traqué", color = Cp.mute, size = 12)
-        tasks.take(3).forEachIndexed { i, t ->
-            val hot = i == 0 && scene.moduleOp.startsWith("+")
-            val col = if (hot) c else if (i == 0) Cp.ink else Cp.ink.copy(alpha = 0.55f)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Body(t.nom, color = col, size = 13, maxLines = 1)
-                Mono("${t.avancement} %", c, 10)
+    Chip("Tâches", c, scene.moduleOp) {
+        if (tasks.isEmpty()) Body("Aucun projet", color = Cp.mute, size = 12)
+        tasks.take(2).forEachIndexed { i, t ->
+            val hot = i == 0
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Body(t.nom, color = if (hot) Cp.ink else Cp.ink.copy(alpha = 0.55f), size = 12)
+                Mono("${t.avancement}", if (hot) c else Cp.mute, 10)
             }
-            Spacer(Modifier.height(2.dp))
-            Box(Modifier.fillMaxWidth().height(2.dp).background(c.copy(alpha = 0.15f))) {
-                Box(Modifier.fillMaxWidth(t.avancement / 100f).fillMaxHeight().background(if (hot || i == 0) c else Cp.mute))
-            }
-            if (i < 2) Spacer(Modifier.height(6.dp))
+            Line(t.avancement / 100f, c, dim = !hot)
         }
     }
 }
 
 @Composable
-fun NotesTip(scene: Scene, dao: PresenceDao) {
+fun NotesChip(scene: Scene, dao: PresenceDao) {
     val notes by dao.notes().collectAsState(emptyList())
-    Tooltip("Note", "#${notes.size.toString().padStart(4, '0')}", Module.NOTES.color()) {
-        if (notes.isEmpty()) Body("Rien encore", color = Cp.mute, size = 12)
-        notes.take(3).forEachIndexed { i, n -> Body(n.texte, color = if (i == 0) Cp.ink else Cp.ink.copy(alpha = 0.5f), size = 13, maxLines = 1) }
+    Chip("Note", Module.NOTES.color(), "#${notes.size.toString().padStart(3, '0')}") {
+        Body(notes.firstOrNull()?.texte ?: "—", size = 12, maxLines = 2)
     }
 }
 
 @Composable
-fun MedsTip(scene: Scene, dao: PresenceDao) {
+fun MedsChip(scene: Scene, dao: PresenceDao) {
     val today = SimpleDateFormat("yyyy-MM-dd", Locale.CANADA_FRENCH).format(Date())
     val med by dao.medFlow(today).collectAsState(null)
     val taken = med?.prisA != null
     val c = Module.MEDS.color()
-    Tooltip("Médicament", if (taken) SimpleDateFormat("HH:mm", Locale.CANADA_FRENCH).format(Date(med!!.prisA!!)) else "08:00", c) {
+    Chip("Méd", c, if (taken) SimpleDateFormat("HH:mm", Locale.CANADA_FRENCH).format(Date(med!!.prisA!!)) else "08:00") {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Canvas(Modifier.size(34.dp)) {
-                val stroke = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Butt)
-                drawArc(c.copy(alpha = 0.18f), 0f, 360f, false, style = stroke)
+            Canvas(Modifier.size(16.dp)) {
+                val stroke = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Butt)
+                drawArc(c.copy(alpha = 0.2f), 0f, 360f, false, style = stroke)
                 drawArc(if (taken) c else Cp.red, -90f, if (taken) 360f else 300f, false, style = stroke)
             }
-            Spacer(Modifier.width(12.dp))
-            Column {
-                Body(if (taken) "Pris" else "Pas confirmé", size = 15)
-                Mono(if (taken) "anneau fermé" else "anneau ouvert", size = 9)
-            }
+            Spacer(Modifier.width(8.dp))
+            Body(if (taken) "Pris" else "Pas confirmé", size = 12)
         }
     }
 }
 
 @Composable
-fun BudgetTip(scene: Scene, dao: PresenceDao) {
+fun BudgetChip(scene: Scene, dao: PresenceDao) {
     val monthStart = Calendar.getInstance().apply { set(Calendar.DAY_OF_MONTH, 1); set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0) }.timeInMillis
     val ex by dao.expenses(monthStart).collectAsState(emptyList())
     val spent = ex.sumOf { it.montant }
     val c = Module.BUDGET.color()
-    Tooltip("Budget", SimpleDateFormat("MMM", Locale.CANADA_FRENCH).format(Date()), c) {
+    Chip("Budget", c, ex.firstOrNull()?.let { "−${it.montant.toInt()} $" } ?: "") {
         Row(verticalAlignment = Alignment.Bottom) {
-            Body("${(600.0 - spent).toInt()}", size = 24, weight = FontWeight.Bold, maxLines = 1)
+            Body("${(600.0 - spent).toInt()} $", size = 16, weight = FontWeight.Bold)
             Spacer(Modifier.width(6.dp))
-            Mono("$ MARGE", c, 10)
+            Mono("marge", c, 9)
         }
-        Mono(ex.firstOrNull()?.let { "−${it.montant.toInt()} $ · ${it.quoi}" } ?: "aucune dépense", size = 9)
+        Line(((600.0 - spent) / 600.0).toFloat(), c)
     }
 }
 
 @Composable
-fun MoodTip(scene: Scene, dao: PresenceDao) {
+fun MoodChip(scene: Scene, dao: PresenceDao) {
     val moods by dao.moods().collectAsState(emptyList())
     val c = Module.MOOD.color()
-    Tooltip("Mood", "14 j", c) {
-        Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+    Chip("Mood", c, moods.firstOrNull()?.let { "${if (it.valeur > 0) "+" else ""}${it.valeur}" } ?: "") {
+        Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             moods.reversed().takeLast(14).forEach { m ->
                 val col = when { m.valeur > 0 -> c; m.valeur < 0 -> Cp.red; else -> Cp.mute }
-                Box(Modifier.size(10.dp).border(2.dp, col.copy(alpha = 0.5f + 0.25f * kotlin.math.abs(m.valeur))))
+                Box(Modifier.size(width = 7.dp, height = (6 + 3 * kotlin.math.abs(m.valeur)).dp).background(col))
             }
         }
-        moods.firstOrNull()?.let { Spacer(Modifier.height(5.dp)); Body(it.note.ifBlank { "valeur ${it.valeur}" }, size = 13, maxLines = 1) }
     }
 }
 
 @Composable
-fun AgendaTip(scene: Scene, dao: PresenceDao) {
+fun AgendaChip(scene: Scene, dao: PresenceDao) {
     val ev by dao.events(System.currentTimeMillis()).collectAsState(emptyList())
-    val f = SimpleDateFormat("EEE d · HH:mm", Locale.CANADA_FRENCH)
+    val f = SimpleDateFormat("EEE HH:mm", Locale.CANADA_FRENCH)
     val c = Module.AGENDA.color()
-    Tooltip("Agenda", "${ev.size} à venir", c) {
-        if (ev.isEmpty()) Body("Rien de prévu", color = Cp.mute, size = 12)
-        ev.take(3).forEach { e ->
+    Chip("Agenda", c, "${ev.size}") {
+        if (ev.isEmpty()) Body("Rien", color = Cp.mute, size = 12)
+        ev.take(2).forEach { e ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Body(e.quoi, size = 13, maxLines = 1)
+                Body(e.quoi, size = 12)
                 Mono(f.format(Date(e.quand)), c, 9)
             }
         }
