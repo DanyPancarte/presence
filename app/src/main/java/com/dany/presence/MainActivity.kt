@@ -7,59 +7,53 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import com.dany.presence.audio.AudioReactor
-import com.dany.presence.brain.Conversation
-import com.dany.presence.brain.Scene
-import com.dany.presence.data.Module
-import com.dany.presence.data.Modules
-import com.dany.presence.render.HoloState
-import com.dany.presence.render.HoloView
+import androidx.lifecycle.lifecycleScope
+import com.dany.presence.core.Bus
+import com.dany.presence.core.Signal
+import com.dany.presence.core.WorldRepo
+import com.dany.presence.ears.EarsSystem
+import com.dany.presence.hud.Hud
+import com.dany.presence.hud.SettingsDialog
+import com.dany.presence.mind.MindSystem
+import com.dany.presence.mind.Provider
 import com.dany.presence.ritual.Ritual
-import com.dany.presence.ui.Overlays
-import com.dany.presence.voice.Speech
-import kotlin.math.abs
+import com.dany.presence.scene.SceneView
+import com.dany.presence.shell.AppDrawer
+import com.dany.presence.shell.BusHolder
+import com.dany.presence.shell.Launcher
+import com.dany.presence.shell.presenceGestures
+import com.dany.presence.sound.SoundSystem
 
 /**
- * Zero chrome: the hologram is the interface.
- *  - mains libres     → le micro est toujours ouvert ; parler suffit
- *  - tap              → interrompt (voix ou analyse) et rouvre le micro
- *  - swipe vertical   → aperçu du module suivant / précédent
- *  - doigt posé       → repousse les particules
- *  - appui long       → réglage caché (clé API Gemini)
+ * Présence — the shell. One Bus, five systems, zero chrome (see ARCHITECTURE.md).
+ *  - hands-free: the mic is open while the screen is on; talking is the interface
+ *  - swipe up    → the constellation of apps (Présence is the home screen)
+ *  - long press  → hidden settings (brain keys, sound, home)
+ *  - finger      → pushes the scene
  */
 class MainActivity : ComponentActivity() {
-    private val holo = HoloState()
-    private lateinit var view: HoloView
-    private lateinit var audio: AudioReactor
-    private lateinit var speech: Speech
-    private lateinit var modules: Modules
-    private lateinit var convo: Conversation
-    private val sceneState = mutableStateOf(Scene())
-    private var pendingMode: String? = null
+    private val bus = Bus()
+    private lateinit var world: WorldRepo
+    private lateinit var scene: SceneView
+    private lateinit var ears: EarsSystem
+    private lateinit var mind: MindSystem
+    private lateinit var sound: SoundSystem
+    private var pendingRitual: String? = null
+    private var running = false
 
     private val perms = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { r ->
-        if (r[Manifest.permission.RECORD_AUDIO] == true) { val m = pendingMode; pendingMode = null; convo.wake(m?.let(Ritual::greeting)) }
+        if (r[Manifest.permission.RECORD_AUDIO] == true) startSystems()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -72,115 +66,75 @@ class MainActivity : ComponentActivity() {
         setShowWhenLocked(true)
         setTurnScreenOn(true)
 
-        view = HoloView(this, holo)
-        audio = AudioReactor(holo)
-        speech = Speech(this)
-        modules = Modules(this)
-        convo = Conversation(this, holo, speech, modules) { sceneState.value = it }
-        // Hands-free: the recognizer owns the mic and feeds the hologram; the FFT analyser stays off.
-        convo.onListening = { }
-        Ritual.scheduleAll(this)
-        pendingMode = intent?.getStringExtra(Ritual.EXTRA_MODE)
+        BusHolder.bus = bus
+        world = WorldRepo(this, lifecycleScope)
+        scene = SceneView(this, bus, world.world, lifecycleScope)
+        ears = EarsSystem(this, bus, lifecycleScope)
+        mind = MindSystem(this, bus, lifecycleScope)
+        sound = SoundSystem(this, bus, lifecycleScope)
+        pendingRitual = intent?.getStringExtra(Ritual.EXTRA_MODE)
 
         setContent {
-            val scene by sceneState
-            var showSettings by remember { mutableStateOf(false) }
-            var moduleIdx by remember { mutableStateOf(0) }
+            var drawer by remember { mutableStateOf(false) }
+            var settings by remember { mutableStateOf(false) }
             Box(
                 Modifier
                     .fillMaxSize()
-                    .pointerInput(Unit) {
-                        awaitPointerEventScope {
-                            while (true) {
-                                val ev = awaitPointerEvent()
-                                val p = ev.changes.firstOrNull() ?: continue
-                                if (ev.type == PointerEventType.Release) { holo.touchX = 99f; holo.touchY = 99f; continue }
-                                val (bx, by) = view.renderer.touchToBox(p.position.x, p.position.y)
-                                holo.touchX = bx; holo.touchY = by
-                            }
-                        }
-                    }
-                    .pointerInput(Unit) {
-                        detectTapGestures(onTap = { convo.toggle() }, onLongPress = { showSettings = true })
-                    }
-                    .pointerInput(Unit) {
-                        var dy = 0f; var dx = 0f
-                        detectDragGestures(
-                            onDragStart = { dx = 0f; dy = 0f },
-                            onDragEnd = {
-                                if (abs(dy) > abs(dx) && abs(dy) > 140f) {
-                                    val mods = Module.entries.filter { it != Module.AUCUN }
-                                    moduleIdx = (moduleIdx + (if (dy < 0) 1 else mods.size - 1)) % mods.size
-                                    convo.peek(mods[moduleIdx])
-                                }
-                            },
-                        ) { _, d -> dx += d.x; dy += d.y }
-                    },
+                    .presenceGestures(bus, onSwipeUp = { drawer = true }, onLongPress = { settings = true }),
             ) {
-                AndroidView(factory = { view }, modifier = Modifier.fillMaxSize())
-                Overlays(scene, holo, modules.dao, Modifier.fillMaxSize())
-                if (showSettings) SettingsDialog(convo.llm) { showSettings = false }
+                AndroidView(factory = { scene }, modifier = Modifier.fillMaxSize())
+                Hud(bus, world.world, Modifier.fillMaxSize())
+                AppDrawer(world.world, drawer, onLaunch = { Launcher.launch(this@MainActivity, it, bus); drawer = false }, onDismiss = { drawer = false })
+                if (settings) {
+                    val llm = mind.llm
+                    SettingsDialog(
+                        provider = llm.provider.name,
+                        keys = Provider.entries.associate { it.name to llm.key(it) },
+                        models = Provider.entries.associate { it.name to llm.model(it) },
+                        onSave = { p, keys, models ->
+                            runCatching { Provider.valueOf(p) }.getOrNull()?.let { llm.provider = it }
+                            keys.forEach { (id, k) -> runCatching { Provider.valueOf(id) }.getOrNull()?.let { llm.setKey(it, k) } }
+                            models.forEach { (id, m) -> runCatching { Provider.valueOf(id) }.getOrNull()?.let { llm.setModel(it, m) } }
+                            settings = false
+                        },
+                        onDismiss = { settings = false },
+                    )
+                }
             }
         }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        intent.getStringExtra(Ritual.EXTRA_MODE)?.let { m -> if (hasMic()) convo.wake(Ritual.greeting(m)) else pendingMode = m }
+        val mode = intent.getStringExtra(Ritual.EXTRA_MODE) ?: return
+        if (running) bus.emit(Signal.Ritual(mode)) else pendingRitual = mode
     }
 
-    private fun hasMic() = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+    private fun startSystems() {
+        if (running) return
+        running = true
+        mind.start()
+        sound.start()
+        ears.start()
+        pendingRitual?.let { bus.emit(Signal.Ritual(it)); pendingRitual = null }
+    }
 
     override fun onResume() {
         super.onResume()
-        view.onResume()
+        scene.onResume()
         val missing = listOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.POST_NOTIFICATIONS, Manifest.permission.BLUETOOTH_CONNECT)
             .filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
-        if (missing.isEmpty()) {
-            val m = pendingMode; pendingMode = null
-            convo.wake(m?.let(Ritual::greeting))
-        } else perms.launch(missing.toTypedArray())
+        if (missing.isEmpty()) startSystems() else perms.launch(missing.toTypedArray())
     }
 
     override fun onPause() {
-        convo.sleep()
-        audio.stop()
-        view.onPause()
+        if (running) {
+            running = false
+            ears.stop()
+            sound.stop()
+            mind.stop()
+        }
+        scene.onPause()
         super.onPause()
     }
-
-    override fun onDestroy() { speech.release(); super.onDestroy() }
-}
-
-/** Hidden settings (long press): provider, keys and models. Keys never leave the phone. */
-@Composable
-fun SettingsDialog(llm: com.dany.presence.brain.Llm, onClose: () -> Unit) {
-    var provider by remember { mutableStateOf(llm.provider) }
-    val keys = remember { mutableStateOf(com.dany.presence.brain.Provider.entries.associateWith { llm.key(it) }) }
-    val models = remember { mutableStateOf(com.dany.presence.brain.Provider.entries.associateWith { llm.model(it) }) }
-    AlertDialog(
-        onDismissRequest = onClose,
-        confirmButton = {
-            TextButton(onClick = {
-                llm.provider = provider
-                keys.value.forEach { (p, k) -> llm.setKey(p, k) }
-                models.value.forEach { (p, m) -> llm.setModel(p, m) }
-                onClose()
-            }) { Text("Garder") }
-        },
-        dismissButton = { TextButton(onClick = onClose) { Text("Annuler") } },
-        title = { Text("Cerveau") },
-        text = {
-            Column {
-                com.dany.presence.brain.Provider.entries.forEach { p ->
-                    androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                        androidx.compose.material3.RadioButton(selected = provider == p, onClick = { provider = p })
-                        Text(p.label)
-                    }
-                    OutlinedTextField(value = keys.value[p] ?: "", onValueChange = { keys.value = keys.value + (p to it) }, label = { Text("Clé ${p.name.lowercase()}") }, singleLine = true)
-                    OutlinedTextField(value = models.value[p] ?: "", onValueChange = { models.value = models.value + (p to it) }, label = { Text("Modèle") }, singleLine = true)
-                }
-            }
-        },
-    )
 }
