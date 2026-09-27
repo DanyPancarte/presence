@@ -1,0 +1,23 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Bulle de parole « Murmure » -->
+    <path android:pathData="M54,30C67.3,30 78,39.8 78,52C78,64.2 67.3,74 54,74C50.2,74 46.6,73.2 43.4,71.8L33,77.5L35.6,67.3C32.1,63.3 30,57.9 30,52C30,39.8 40.7,30 54,30Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="32" android:startY="30"
+                android:endX="78" android:endY="76">
+                <item android:offset="0" android:color="#FFFFB8A0" />
+                <item android:offset="0.55" android:color="#FFE9B4F0" />
+                <item android:offset="1" android:color="#FFB9A4FF" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Onde vocale -->
+    <path android:strokeColor="#FF14121F" android:strokeWidth="4.6" android:strokeLineCap="round"
+        android:pathData="M42.5,49L42.5,55M49.5,43.5L49.5,60.5M56.5,46.5L56.5,57.5M63.5,50L63.5,54" />
+</vector>
