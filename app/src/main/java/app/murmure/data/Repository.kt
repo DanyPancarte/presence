@@ -3,6 +3,8 @@ package app.murmure.data
 import app.murmure.ai.AnalysisContext
 import app.murmure.ai.EntityGuess
 import app.murmure.ai.GeminiClient
+import app.murmure.ai.AiRouter
+import app.murmure.ai.ClaudeClient
 import app.murmure.ai.LocalBrain
 import app.murmure.ai.NoteAnalyzer
 import app.murmure.ai.NoteProposal
@@ -56,9 +58,10 @@ class Repository(
     private val db: MurmureDb,
     private val settings: SettingsStore,
     private val client: GeminiClient,
+    private val ai: AiRouter = AiRouter(client, ClaudeClient(client.http)),
 ) {
     val dao = db.dao()
-    private val analyzer = NoteAnalyzer(client)
+    private val analyzer = NoteAnalyzer(ai)
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
     val notes = dao.notesFlow()
@@ -316,7 +319,7 @@ Rédige un compte rendu en Markdown, en français québécois, bienveillant et c
 (puces, formulées comme suggestions)
 Reste descriptif, n'invente rien.
 """.trimIndent()
-        val out = client.generate(s.apiKey, s.textModel, prompt, temperature = 0.4)
+        val out = ai.generate(s, prompt, temperature = 0.4)
         dao.upsertReport(ReportEntity("folder:${folderId ?: "all"}", out, System.currentTimeMillis()))
         out
     }
@@ -337,7 +340,7 @@ Rédige en Markdown, au tutoiement, en français québécois :
 2-3 suggestions douces et concrètes.
 Règles : tu n'es pas un outil clinique, aucun diagnostic, aucune causalité affirmée (corrélation ≠ cause), mentionne quand l'échantillon est petit.
 """.trimIndent()
-        val out = client.generate(s.apiKey, s.textModel, prompt, temperature = 0.5)
+        val out = ai.generate(s, prompt, temperature = 0.5)
         dao.upsertReport(ReportEntity("portrait", out, System.currentTimeMillis()))
         out
     }

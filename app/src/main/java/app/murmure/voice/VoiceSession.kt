@@ -103,8 +103,13 @@ class VoiceSession(
             return
         }
         if (reason != null) _state.update { it.copy(notice = "Bascule vers ${e.label} — $reason".take(160)) }
-        else if (!settings.hasAiKey && e == Engine.DEVICE)
-            _state.update { it.copy(notice = "Aucune clé API : reconnaissance de l'appareil. Ajoute ta clé dans Réglages pour l'IA.") }
+        else if (settings.apiKey.isBlank() && e == Engine.DEVICE)
+            _state.update {
+                it.copy(
+                    notice = if (settings.claudeKey.isNotBlank()) "Transcription par l'appareil · analyse par Claude."
+                    else "Aucune clé API : reconnaissance de l'appareil. Ajoute ta clé dans Réglages pour l'IA.",
+                )
+            }
 
         when (e) {
             Engine.DEVICE -> {

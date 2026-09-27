@@ -21,6 +21,7 @@ open class MurmureApp : Application(), Configuration.Provider {
     lateinit var settings: SettingsStore; private set
     lateinit var client: GeminiClient; private set
     lateinit var analyzer: NoteAnalyzer; private set
+    lateinit var claude: app.murmure.ai.ClaudeClient; private set
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     val repo: Repository by lazy { Repository(openDatabase(), settings, client) }
@@ -38,7 +39,8 @@ open class MurmureApp : Application(), Configuration.Provider {
         vault = createVault()
         settings = SettingsStore(this, vault)
         client = GeminiClient(GeminiClient.defaultHttp())
-        analyzer = NoteAnalyzer(client)
+        claude = app.murmure.ai.ClaudeClient(client.http)
+        analyzer = NoteAnalyzer(app.murmure.ai.AiRouter(client, claude))
         app.murmure.ui.components.Feedback.init(this)
         appScope.launch {
             settings.state.collect { s ->

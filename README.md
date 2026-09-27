@@ -14,9 +14,9 @@
 
 ## ⬇️ Installer l'APK (2 min)
 
-1. Récupère **`dist/murmure-1.1.0.apk`** (ou l'artefact `murmure-apk` de la CI GitHub Actions).
+1. Récupère **`dist/murmure-1.1.1.apk`** (ou l'artefact `murmure-apk` de la CI GitHub Actions).
 2. Sur le téléphone : ouvre le fichier → Android demande d'**autoriser l'installation d'applis inconnues** pour ton navigateur / gestionnaire de fichiers → *Autoriser* → *Installer*.
-   - Par câble : `adb install dist/murmure-1.1.0.apk`
+   - Par câble : `adb install dist/murmure-1.1.1.apk`
 3. Android 8.0+ (API 26). Testé en build pour `arm64-v8a`, `armeabi-v7a`, `x86_64`.
 
 ## 🔑 Brancher l'IA (clé Google Gemini)
@@ -45,6 +45,10 @@
 - **Aura plein écran** qui respire avec ta voix et prend la teinte de l'émotion perçue ; bandeau *Dossier · Sujet · Émotion* ; insight en direct.
 - **Feeling** : sons courts (début, fin, moment, succès), retours haptiques, boutons qui s'enfoncent, tooltips sur les icônes, transitions d'écran.
 - **Agenda** : onglet regroupant tâches et rendez-vous à venir ; insight du jour sur l'accueil.
+
+## 🤖 Analyse par Claude (option, 1.1.1)
+
+Quota Gemini gratuit épuisé ? Dans **Réglages → Analyse · Anthropic Claude**, colle une clé `sk-ant-…` (prépayée sur [console.anthropic.com](https://console.anthropic.com/settings/keys), 5 $ minimum). Claude prend alors le classement, les moments live, les comptes rendus et le portrait. La **transcription** reste Gemini Live ou le moteur de l'appareil (Claude n'a pas d'API audio temps réel). Coût indicatif par session de 5 min : Haiku 4.5 ≈ 0,10 $, Sonnet 5 ≈ 0,25 $. Un abonnement Claude Pro/Max ne donne pas d'accès API.
 
 ## 🧭 Parcours
 

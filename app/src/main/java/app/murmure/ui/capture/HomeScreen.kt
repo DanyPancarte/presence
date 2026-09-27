@@ -140,7 +140,7 @@ fun HomeScreen(nav: NavHostController) {
         }
         if (!settings.hasAiKey) {
             Text(
-                "Mode appareil · ajoute ta clé IA dans Réglages",
+                "Sans clé IA · ajoute Gemini ou Claude dans Réglages",
                 style = MaterialTheme.typography.labelSmall, color = M.Butter,
                 modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 6.dp).clickable { nav.navigate(Routes.SETTINGS) },
             )

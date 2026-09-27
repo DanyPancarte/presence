@@ -65,6 +65,8 @@ import androidx.navigation.NavHostController
 import app.murmure.MurmureApp
 import app.murmure.ai.GeminiClient
 import app.murmure.core.Engine
+import app.murmure.core.AiProvider
+import app.murmure.ai.ClaudeClient
 import app.murmure.data.DemoData
 import app.murmure.reminder.DailyReminder
 import app.murmure.ui.Routes
@@ -132,6 +134,9 @@ fun SettingsScreen(nav: NavHostController) {
     var stt by remember { mutableStateOf(s.cloudSttKey) }
     var testing by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
+    var claudeKey by remember { mutableStateOf(s.claudeKey) }
+    var claudeTesting by remember { mutableStateOf(false) }
+    var claudeResult by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
     var confirmWipe by remember { mutableStateOf(false) }
     var advanced by remember { mutableStateOf(false) }
 
@@ -185,6 +190,59 @@ fun SettingsScreen(nav: NavHostController) {
                     },
                 )
                 if (s.hasAiKey) TextButton(onClick = { app.settings.update { it.copy(apiKey = "") }; key = "" }) { Text("Retirer la clé", color = M.Coral) }
+            }
+
+            // ---------- Claude (analyse) ----------
+            Spacer(Modifier.height(14.dp))
+            Card(tint = M.Peach) {
+                Eyebrow("Analyse · Anthropic Claude (option)", color = M.Peach)
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Alternative à Gemini pour le classement, les moments, les comptes rendus et le portrait. " +
+                        "La transcription en direct reste Gemini Live ou l'appareil. Clé prépayée sur console.anthropic.com (5 $ minimum ≈ des semaines d'usage).",
+                    style = MaterialTheme.typography.bodySmall, color = M.Muted,
+                )
+                Spacer(Modifier.height(12.dp))
+                ApiKeyField(claudeKey, { claudeKey = it; claudeResult = null }, "Clé Anthropic (sk-ant-…)")
+                Spacer(Modifier.height(10.dp))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ClaudeClient.models.forEach { (id, label) ->
+                        Tag(label.substringBefore(" ·"), M.Peach, selected = s.claudeModel == id) { app.settings.update { it.copy(claudeModel = id) } }
+                    }
+                }
+                ClaudeClient.models.firstOrNull { it.first == s.claudeModel }?.let {
+                    Text(it.second, style = MaterialTheme.typography.labelSmall, color = M.Faint, modifier = Modifier.padding(top = 6.dp))
+                }
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    PrimaryButton(if (claudeTesting) "Test…" else "Tester et enregistrer", color = M.Peach, enabled = claudeKey.isNotBlank() && !claudeTesting) {
+                        claudeTesting = true
+                        scope.launch {
+                            claudeResult = runCatching { app.claude.ping(claudeKey, s.claudeModel) }
+                                .onSuccess { app.settings.update { it.copy(claudeKey = claudeKey, provider = AiProvider.CLAUDE) } }
+                                .fold({ true to it }, { false to (it.message ?: "Échec") })
+                            claudeTesting = false
+                        }
+                    }
+                    if (claudeTesting) CircularProgressIndicator(color = M.Peach, strokeWidth = 2.dp, modifier = Modifier.size(22.dp))
+                }
+                claudeResult?.let { (ok, msg) -> Spacer(Modifier.height(10.dp)); Banner(msg, if (ok) M.Mint else M.Coral) }
+                if (s.claudeKey.isNotBlank()) {
+                    Spacer(Modifier.height(10.dp))
+                    Text("Moteur d'analyse", style = MaterialTheme.typography.labelMedium, color = M.Muted)
+                    Spacer(Modifier.height(6.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        AiProvider.entries.forEach { p ->
+                            Tag(p.label, if (p == AiProvider.CLAUDE) M.Peach else M.Lilac, selected = s.provider == p) { app.settings.update { it.copy(provider = p) } }
+                        }
+                    }
+                    TextButton(onClick = { app.settings.update { it.copy(claudeKey = "", provider = AiProvider.GEMINI) }; claudeKey = "" }) { Text("Retirer la clé Claude", color = M.Coral) }
+                }
+                Text(
+                    "Obtenir une clé → console.anthropic.com",
+                    style = MaterialTheme.typography.labelMedium, color = M.Sky,
+                    modifier = Modifier.clickable { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://console.anthropic.com/settings/keys"))) },
+                )
             }
 
             Spacer(Modifier.height(14.dp))
@@ -328,7 +386,7 @@ fun SettingsScreen(nav: NavHostController) {
                 scope.launch {
                     app.repo.wipeEverything()
                     app.repo.ensureDefaults()
-                    key = ""; stt = ""
+                    key = ""; stt = ""; claudeKey = ""
                     Toast.makeText(context, "Tout a été effacé.", Toast.LENGTH_LONG).show()
                     nav.navigate(Routes.HOME) { popUpTo(0) }
                 }

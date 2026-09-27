@@ -15,7 +15,7 @@ data class AnalysisContext(
 )
 
 /** Transforme une dictée brute en note structurée + classification proposée. */
-class NoteAnalyzer(private val client: GeminiClient) {
+class NoteAnalyzer(private val ai: AiRouter) {
     private val json = Json { ignoreUnknownKeys = true; isLenient = true; coerceInputValues = true }
 
     private val system = """
@@ -62,7 +62,7 @@ Règles :
 """.trimIndent()
             )
         }
-        val raw = client.generate(settings.apiKey, settings.textModel, prompt, system, jsonMode = true, temperature = 0.3)
+        val raw = ai.generate(settings, prompt, system, jsonMode = true, temperature = 0.3)
         val p = json.decodeFromString(NoteProposal.serializer(), extractJson(raw))
         return sanitize(p, transcript, ctx)
     }
@@ -135,7 +135,7 @@ Règles :
 - "mood" = état émotionnel déclaré (« je me sens… »). "idea" = idée, envie, projet flou.
 - Maximum 6 moments, 8 mots-clés. N'invente rien.
 """.trimIndent()
-        val raw = client.generate(settings.apiKey, settings.textModel, prompt, jsonMode = true, temperature = 0.15)
+        val raw = ai.generate(settings, prompt, jsonMode = true, temperature = 0.15)
         val la = json.decodeFromString(LiveAnalysis.serializer(), extractJson(raw))
         // Ancre chaque moment à sa position réelle dans le texte complet.
         val anchored = la.moments.mapIndexed { i, m ->
@@ -211,7 +211,7 @@ Règles :
 """.trimIndent()
             )
         }
-        val raw = client.generate(settings.apiKey, settings.textModel, prompt, system, jsonMode = true, temperature = 0.3)
+        val raw = ai.generate(settings, prompt, system, jsonMode = true, temperature = 0.3)
         val sp = json.decodeFromString(SessionProposal.serializer(), extractJson(raw))
         val notes = sp.notes.ifEmpty { listOf(NoteProposal(body = transcript)) }.map { sanitize(it, transcript, ctx) }
         return sp.copy(

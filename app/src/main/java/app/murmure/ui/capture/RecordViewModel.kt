@@ -126,7 +126,7 @@ class RecordViewModel : ViewModel() {
         val s = app.settings.current
         if (!s.hasAiKey || !s.liveHighlights || aiJob?.isActive == true) return
         val now = System.currentTimeMillis()
-        if (text.length - lastAiLen < 60 || now - lastAiAt < 7_000) return
+        if (text.length - lastAiLen < 80 || now - lastAiAt < 10_000) return
         lastAiLen = text.length; lastAiAt = now
         aiJob = viewModelScope.launch {
             _ui.update { it.copy(thinking = true) }
