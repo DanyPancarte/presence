@@ -13,7 +13,7 @@ data class Reply(val dire: String, val etat: String, val module: String, val act
 class LlmException(msg: String) : Exception(msg)
 
 enum class Provider(val label: String, val defaultModel: String) {
-    GEMINI("Gemini (palier gratuit)", "gemini-2.5-flash"),
+    GEMINI("Gemini (palier gratuit)", "gemini-3.8-flash"),
     CLAUDE("Claude (payant)", "claude-haiku-4-5"),
 }
 
@@ -54,20 +54,56 @@ class Llm(context: Context) {
         history.forEach { (role, text) ->
             contents.put(JSONObject().put("role", role).put("parts", JSONArray().put(JSONObject().put("text", text))))
         }
-        val body = JSONObject()
+        fun body(thinking: Boolean) = JSONObject()
             .put("system_instruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", system))))
             .put("contents", contents)
             .put("generationConfig", JSONObject()
                 .put("responseMimeType", "application/json")
                 .put("temperature", 0.9)
-                .put("maxOutputTokens", 400)
-                .put("thinkingConfig", JSONObject().put("thinkingBudget", 0)))
-        val text = post(
-            "https://generativelanguage.googleapis.com/v1beta/models/${model(Provider.GEMINI)}:generateContent",
-            mapOf("x-goog-api-key" to key(Provider.GEMINI)), body,
-        )
+                .put("maxOutputTokens", 600)
+                .also { if (thinking) it.put("thinkingConfig", JSONObject().put("thinkingLevel", "low")) })
+        val headers = mapOf("x-goog-api-key" to key(Provider.GEMINI))
+        fun call(model: String, thinking: Boolean) =
+            post("https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent", headers, body(thinking))
+        var model = model(Provider.GEMINI)
+        val text = try {
+            call(model, true)
+        } catch (e: LlmException) {
+            val m = e.message.orEmpty().lowercase()
+            when {
+                // Model gone or not allowed for this key: ask the API what this key can use, once.
+                "not found" in m || "not supported" in m || "404" in m || "403" in m -> {
+                    model = discoverGemini() ?: throw e
+                    setModel(Provider.GEMINI, model)
+                    runCatching { call(model, true) }.getOrElse { call(model, false) }
+                }
+                "thinking" in m -> call(model, false)
+                else -> throw e
+            }
+        }
         return JSONObject(text).getJSONArray("candidates").getJSONObject(0)
             .getJSONObject("content").getJSONArray("parts").getJSONObject(0).getString("text")
+    }
+
+    /** Newest general-purpose flash model this key can call (GET /models). */
+    private fun discoverGemini(): String? {
+        val conn = (URL("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200").openConnection() as HttpURLConnection).apply {
+            setRequestProperty("x-goog-api-key", key(Provider.GEMINI)); connectTimeout = 10_000; readTimeout = 15_000
+        }
+        if (conn.responseCode !in 200..299) return null
+        val models = JSONObject(conn.inputStream.bufferedReader().use { it.readText() }).optJSONArray("models") ?: return null
+        val bad = listOf("lite", "image", "tts", "live", "transcribe", "embed", "preview", "exp", "thinking", "8b", "audio", "vision", "computer")
+        var best: String? = null; var bestV = -1.0
+        for (i in 0 until models.length()) {
+            val o = models.getJSONObject(i)
+            val name = o.optString("name").removePrefix("models/")
+            val methods = o.optJSONArray("supportedGenerationMethods")?.let { a -> (0 until a.length()).map { a.getString(it) } } ?: emptyList()
+            if ("generateContent" !in methods || !name.startsWith("gemini-") || !name.contains("flash")) continue
+            if (bad.any { name.contains(it) }) continue
+            val v = Regex("gemini-(\\d+(?:\\.\\d+)?)").find(name)?.groupValues?.get(1)?.toDoubleOrNull() ?: continue
+            if (v > bestV) { bestV = v; best = name }
+        }
+        return best
     }
 
     // ---- Claude: Messages API, structured output -----------------------------------------------

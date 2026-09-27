@@ -47,13 +47,15 @@ Sans câble : envoyer l'APK sur le téléphone (Drive, mail), l'ouvrir, autorise
 | Au premier lancement (pop-up) | **Appareils à proximité** (Bluetooth) | Voix dans les écouteurs |
 | Paramètres → Apps → Présence → Notifications | **Notifications plein écran** (Android 14+) | Sinon la relance reste une bannière |
 | Paramètres → Apps → Présence → Batterie | **Sans restriction** | Les alarmes à 17h30 / 20h30 / 8h doivent réveiller le téléphone |
-| Dans l'app : **appui long 3 s** | **Clé API** : Gemini (aistudio.google.com → *Get API key*, palier gratuit sans carte) ou Claude (console.anthropic.com, payant) | Le cerveau. Reste sur le téléphone. |
+| Dans l'app : **appui long 3 s** | **Clé API** : Gemini (aistudio.google.com/apikey, palier gratuit sans carte) ou Claude (console.anthropic.com, payant) | Le cerveau. Reste sur le téléphone. Modèle Gemini par défaut : `gemini-3.8-flash` ; si la clé ne peut pas l'appeler, l'app découvre toute seule le meilleur flash disponible. |
 
 Reconnaissance hors ligne : Paramètres → Système → Langues → Saisie vocale → ajouter **Français (Canada)** au pack hors ligne.
 
 ## Gestes
 
-- **Tap** : parle-lui. ÉCOUTE → RÉFLEXION → RÉPONSE (ou ALERTE). Re-tap = annule.
+- **Mains libres** : le micro est toujours ouvert quand l'app est à l'écran. Parler suffit : VEILLE → ÉCOUTE (dès la première syllabe) → RÉFLEXION → RÉPONSE, puis le micro se rouvre.
+  - Ce qui déclenche une réponse : son nom (« Présence »), un mot de module (tâche, note, budget, pilule, vendredi…), une question, ou une vraie phrase (≥ 5 mots). Un fragment de deux mots est ignoré (affiché « ignoré »). Pendant 25 s après une réponse, tout passe.
+- **Tap** : interrompt (voix ou analyse) et rouvre le micro.
 - **Swipe vertical** : aperçu du module suivant (Tâches → Mood → Notes → Méds → Budget → Agenda).
 - **Doigt posé / glissé** : repousse les particules.
 - **Appui long** : réglages cachés (clé et modèle Gemini).

@@ -26,16 +26,17 @@ data class Scene(
     val mood: Mood = Mood.VEILLE,
     val heard: String = "",
     val say: String = "",
-    val module: Module = Module.AUCUN,        // the module tooltip on top
+    val module: Module = Module.AUCUN,
     val moduleOp: String = "",
-    val detections: List<Detection> = emptyList(), // live captures while listening
-    val steps: List<Step> = emptyList(),      // status strip
+    val detections: List<Detection> = emptyList(),
+    val steps: List<Step> = emptyList(),
     val error: String = "",
 )
 
 /**
- * The loop: ÉCOUTE (STT, live intent) → RÉFLEXION (LLM) → RÉPONSE (radio voice), with the module
- * tooltips and a constant status feed.
+ * Hands-free loop. The mic is always open (on-device recognizer, restarted after every result or
+ * timeout). VEILLE while nobody talks; the first syllable flips to ÉCOUTE; a finished utterance
+ * that deserves it goes RÉFLEXION → RÉPONSE (radio voice), then the mic reopens. Tap = interrupt.
  */
 class Conversation(
     context: Context,
@@ -49,11 +50,18 @@ class Conversation(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val history = ArrayList<Pair<String, String>>()
     var onListening: (Boolean) -> Unit = {}
+    /** Continuous listening on/off (off while the activity is paused). */
+    @Volatile var awake = false
+        private set
+    /** True from the first syllable until the reply is spoken. */
     @Volatile var busy = false
         private set
     private var scene = Scene()
     private var clearJob: Runnable? = null
     private var meter: Runnable? = null
+    private var restart: Runnable? = null
+    private var hotUntil = 0L
+    private var speaking = false
 
     init {
         speech.onLevel = { db ->
@@ -62,7 +70,9 @@ class Conversation(
             val t = System.nanoTime() / 1e9
             state.bands = FloatArray(24) { i -> (a * (0.3f + 0.7f * kotlin.math.abs(kotlin.math.sin(t * (2 + i * 0.37) + i)).toFloat()) * (1 - i / 40f)).coerceIn(0f, 1f) }
         }
+        speech.onBegin = { if (!busy) { busy = true; mood(Mood.ECOUTE); step("écoute", "voix détectée") } }
         speech.onPartial = { txt ->
+            if (!busy) { busy = true; mood(Mood.ECOUTE) }
             val det = Intent.detect(txt)
             det.firstOrNull()?.let { state.accentT = ModuleColor.rgb(it.module) }
             set(scene.copy(heard = txt, detections = det, module = det.firstOrNull()?.module ?: Module.AUCUN, moduleOp = det.firstOrNull()?.op ?: ""))
@@ -76,35 +86,79 @@ class Conversation(
         set(scene.copy(steps = steps.takeLast(4)))
     }
 
-    /** Tap on the hologram. */
-    fun toggle() { if (busy) cancel() else listen() }
+    // ---- lifecycle ------------------------------------------------------------------------------
 
-    fun listen(greeting: String? = null) {
-        if (!speech.available) { set(scene.copy(error = "Reconnaissance vocale indisponible")); return }
-        busy = true
-        clearJob?.let(main::removeCallbacks)
+    /** Opens the mic for good. Called on resume (after the permission). */
+    fun wake(greeting: String? = null) {
+        awake = true
+        if (greeting != null) { busy = true; mood(Mood.REPONSE); set(scene.copy(say = greeting)); step("rituel", "voix"); speakWithMeter(greeting) { busy = false; openMic() } }
+        else openMic()
+    }
+
+    fun sleep() {
+        awake = false
+        restart?.let(main::removeCallbacks)
+        speech.stopListening()
         speech.stopSpeaking()
-        state.accentT = ModuleColor.rgb(Module.AUCUN)
-        set(Scene(mood = Mood.ECOUTE, steps = listOf(Step("écoute", "micro ouvert"))))
-        state.mood = Mood.ECOUTE
-        val start = {
+        meter?.let(main::removeCallbacks); meter = null
+        onListening(false)
+        busy = false
+        state.mood = Mood.VEILLE
+        state.amp = 0f
+        set(Scene())
+    }
+
+    /** Tap: interrupt whatever it is doing and reopen the mic. */
+    fun toggle() {
+        if (busy) {
+            speech.stopSpeaking()
+            meter?.let(main::removeCallbacks); meter = null
+            busy = false
+            mood(Mood.VEILLE)
+            set(Scene(steps = listOf(Step("interrompu", "", true))))
+            openMic()
+        } else {
+            step("micro", "ouvert")
+        }
+    }
+
+    private fun openMic(delay: Long = 250) {
+        restart?.let(main::removeCallbacks)
+        val r = Runnable {
+            if (!awake || speaking) return@Runnable
+            if (!speech.available) { set(scene.copy(error = "Reconnaissance vocale indisponible")); return@Runnable }
+            state.accentT = ModuleColor.rgb(Module.AUCUN)
+            if (!busy) { state.mood = Mood.VEILLE; set(Scene(mood = Mood.VEILLE, steps = listOf(Step("veille", "micro ouvert")))) }
             onListening(true)
             speech.listen(
-                onResult = { heard -> onListening(false); think(heard) },
+                onResult = { heard -> onListening(false); onHeard(heard) },
                 onError = { msg ->
                     onListening(false)
                     busy = false
-                    mood(Mood.VEILLE)
-                    set(scene.copy(error = msg, steps = scene.steps + Step("rien capté", "", true)))
-                    scheduleClear(if (msg.isEmpty()) 1500 else 4000)
+                    state.mood = Mood.VEILLE
+                    if (msg.isNotEmpty()) { set(scene.copy(mood = Mood.VEILLE, error = msg)); scheduleClear(4000) }
+                    else set(scene.copy(mood = Mood.VEILLE, heard = "", detections = emptyList(), module = Module.AUCUN))
+                    // Nothing said (or a busy recognizer): reopen, a bit slower after real errors.
+                    openMic(if (msg.isEmpty()) 300 else 1500)
                 },
             )
         }
-        if (greeting != null) { step("rituel", "voix"); speakWithMeter(greeting) { start() } } else start()
+        restart = r
+        main.postDelayed(r, delay)
     }
 
-    private fun think(heard: String) {
+    // ---- an utterance landed ----------------------------------------------------------------
+
+    private fun onHeard(heard: String) {
         val det = Intent.detect(heard)
+        if (!worthAnswering(heard, det)) {
+            // Background chatter: shown briefly, not sent anywhere.
+            busy = false
+            set(scene.copy(heard = heard, detections = emptyList(), module = Module.AUCUN, steps = listOf(Step("ignoré", "\"${heard.take(30)}\"", true))))
+            openMic(200)
+            return
+        }
+        busy = true
         mood(Mood.REFLEXION)
         set(scene.copy(heard = heard, detections = det, module = det.firstOrNull()?.module ?: scene.module))
         step("capté", "\"${heard.take(40)}\"", true)
@@ -121,8 +175,9 @@ class Conversation(
                 busy = false
                 mood(Mood.ALERTE)
                 set(scene.copy(error = e.message ?: "Erreur", steps = scene.steps + Step("échec", "", true)))
-                main.postDelayed({ if (!busy) mood(Mood.VEILLE) }, 2500)
+                main.postDelayed({ if (!busy) state.mood = Mood.VEILLE }, 2500)
                 scheduleClear(7000)
+                openMic(600)
                 return@launch
             }
             history.add("model" to JSONObject().put("dire", reply.dire).put("etat", reply.etat).put("module", reply.module).toString())
@@ -138,6 +193,19 @@ class Conversation(
         }
     }
 
+    /**
+     * What gets a reply. It's an always-open mic, so not every sound in the room is for it:
+     * addressed by name, touching a module, a question, a real sentence, or within 25 s of
+     * the last exchange — yes. A two-word fragment with no intent — no.
+     */
+    private fun worthAnswering(text: String, det: List<Detection>): Boolean {
+        val t = text.lowercase()
+        val words = t.split(Regex("\\s+")).filter { it.isNotBlank() }.size
+        return t.contains("présence") || t.contains("presence") || det.isNotEmpty() ||
+            t.endsWith("?") || Regex("\\b(est-ce|c'est quoi|combien|pourquoi|comment|quand|qu'est)").containsMatchIn(t) ||
+            words >= 5 || System.currentTimeMillis() < hotUntil
+    }
+
     private fun answer(reply: Reply, module: Module, op: String) {
         val m = if (reply.etat == "ALERTE") Mood.ALERTE else Mood.REPONSE
         state.mood = m
@@ -145,18 +213,22 @@ class Conversation(
         set(scene.copy(mood = m, say = reply.dire, module = module, moduleOp = op, detections = emptyList()))
         step("voix", "radio")
         speakWithMeter(reply.dire) {
-            if (reply.etat == "ECOUTE") listen()
-            else {
-                busy = false
-                mood(Mood.VEILLE)
-                step("prêt", "", true)
-                scheduleClear(7000)
-            }
+            hotUntil = System.currentTimeMillis() + (if (reply.etat == "ECOUTE") 45_000 else 25_000)
+            busy = false
+            state.mood = Mood.VEILLE
+            set(scene.copy(mood = Mood.VEILLE))
+            step("prêt", if (reply.etat == "ECOUTE") "j'attends ta réponse" else "", true)
+            scheduleClear(7000)
+            openMic(150)
         }
     }
 
-    /** Speaks through the radio and feeds the output level to the hologram. */
+    /** Speaks through the radio (mic closed meanwhile) and feeds the output level to the hologram. */
     private fun speakWithMeter(text: String, then: () -> Unit) {
+        speaking = true
+        restart?.let(main::removeCallbacks)
+        speech.stopListening()
+        onListening(false)
         meter?.let(main::removeCallbacks)
         val r = object : Runnable {
             override fun run() {
@@ -172,6 +244,7 @@ class Conversation(
             main.post {
                 meter?.let(main::removeCallbacks); meter = null
                 state.amp = 0f
+                speaking = false
                 then()
             }
         }
@@ -179,28 +252,16 @@ class Conversation(
 
     private fun scheduleClear(ms: Long) {
         clearJob?.let(main::removeCallbacks)
-        val r = Runnable { if (!busy) { set(Scene()); state.accentT = ModuleColor.rgb(Module.AUCUN) } }
+        val r = Runnable { if (!busy) { set(Scene(steps = listOf(Step("veille", "micro ouvert")))); state.accentT = ModuleColor.rgb(Module.AUCUN) } }
         clearJob = r
         main.postDelayed(r, ms)
-    }
-
-    fun cancel() {
-        speech.stopListening()
-        speech.stopSpeaking()
-        meter?.let(main::removeCallbacks); meter = null
-        onListening(false)
-        busy = false
-        state.mood = Mood.VEILLE
-        state.amp = 0f
-        state.accentT = ModuleColor.rgb(Module.AUCUN)
-        set(Scene())
     }
 
     /** Vertical swipe: peek at a module without talking. */
     fun peek(module: Module) {
         if (busy) return
         state.accentT = ModuleColor.rgb(module)
-        set(Scene(mood = Mood.VEILLE, module = module, moduleOp = "aperçu", steps = listOf(Step("aperçu", module.name.lowercase(), true))))
+        set(scene.copy(module = module, moduleOp = "aperçu", steps = listOf(Step("aperçu", module.name.lowercase(), true))))
         scheduleClear(6000)
     }
 
@@ -213,13 +274,13 @@ class Conversation(
 /** One colour per module — on the tooltips and on the hologram's accent particles. */
 object ModuleColor {
     fun rgb(m: Module?): FloatArray = when (m) {
-        Module.TACHES -> floatArrayOf(0.99f, 0.93f, 0.04f)   // yellow
-        Module.NOTES -> floatArrayOf(0.0f, 0.94f, 1.0f)      // cyan
-        Module.MOOD -> floatArrayOf(1.0f, 0.16f, 0.63f)      // magenta
-        Module.MEDS -> floatArrayOf(0.22f, 1.0f, 0.36f)      // green
-        Module.BUDGET -> floatArrayOf(1.0f, 0.54f, 0.0f)     // orange
-        Module.AGENDA -> floatArrayOf(0.55f, 0.42f, 1.0f)    // violet
-        null -> floatArrayOf(1.0f, 0.0f, 0.24f)              // alert red
+        Module.TACHES -> floatArrayOf(0.99f, 0.93f, 0.04f)
+        Module.NOTES -> floatArrayOf(0.0f, 0.94f, 1.0f)
+        Module.MOOD -> floatArrayOf(1.0f, 0.16f, 0.63f)
+        Module.MEDS -> floatArrayOf(0.22f, 1.0f, 0.36f)
+        Module.BUDGET -> floatArrayOf(1.0f, 0.54f, 0.0f)
+        Module.AGENDA -> floatArrayOf(0.55f, 0.42f, 1.0f)
+        null -> floatArrayOf(1.0f, 0.0f, 0.24f)
         else -> floatArrayOf(0.99f, 0.93f, 0.04f)
     }
 }

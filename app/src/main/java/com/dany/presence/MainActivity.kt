@@ -42,7 +42,8 @@ import kotlin.math.abs
 
 /**
  * Zero chrome: the hologram is the interface.
- *  - tap              → parle-lui (ÉCOUTE → RÉFLEXION → RÉPONSE) ; re-tap = annule
+ *  - mains libres     → le micro est toujours ouvert ; parler suffit
+ *  - tap              → interrompt (voix ou analyse) et rouvre le micro
  *  - swipe vertical   → aperçu du module suivant / précédent
  *  - doigt posé       → repousse les particules
  *  - appui long       → réglage caché (clé API Gemini)
@@ -58,7 +59,7 @@ class MainActivity : ComponentActivity() {
     private var pendingMode: String? = null
 
     private val perms = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { r ->
-        if (r[Manifest.permission.RECORD_AUDIO] == true) { audio.start(); pendingMode?.let { m -> pendingMode = null; convo.listen(Ritual.greeting(m)) } }
+        if (r[Manifest.permission.RECORD_AUDIO] == true) { val m = pendingMode; pendingMode = null; convo.wake(m?.let(Ritual::greeting)) }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -76,7 +77,8 @@ class MainActivity : ComponentActivity() {
         speech = Speech(this)
         modules = Modules(this)
         convo = Conversation(this, holo, speech, modules) { sceneState.value = it }
-        convo.onListening = { listening -> if (listening) audio.stop() else if (hasMic()) audio.start() }
+        // Hands-free: the recognizer owns the mic and feeds the hologram; the FFT analyser stays off.
+        convo.onListening = { }
         Ritual.scheduleAll(this)
         pendingMode = intent?.getStringExtra(Ritual.EXTRA_MODE)
 
@@ -124,7 +126,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        intent.getStringExtra(Ritual.EXTRA_MODE)?.let { m -> if (hasMic()) convo.listen(Ritual.greeting(m)) else pendingMode = m }
+        intent.getStringExtra(Ritual.EXTRA_MODE)?.let { m -> if (hasMic()) convo.wake(Ritual.greeting(m)) else pendingMode = m }
     }
 
     private fun hasMic() = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
@@ -135,13 +137,13 @@ class MainActivity : ComponentActivity() {
         val missing = listOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.POST_NOTIFICATIONS, Manifest.permission.BLUETOOTH_CONNECT)
             .filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
         if (missing.isEmpty()) {
-            audio.start()
-            pendingMode?.let { m -> pendingMode = null; convo.listen(Ritual.greeting(m)) }
+            val m = pendingMode; pendingMode = null
+            convo.wake(m?.let(Ritual::greeting))
         } else perms.launch(missing.toTypedArray())
     }
 
     override fun onPause() {
-        convo.cancel()
+        convo.sleep()
         audio.stop()
         view.onPause()
         super.onPause()
