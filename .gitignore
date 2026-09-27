@@ -9,3 +9,4 @@ local.properties
 tools/preview/node_modules/
 tools/preview/data/
 tools/preview/out/
+.claude/worktrees/
