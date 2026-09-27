@@ -59,16 +59,13 @@ fun Card(
     padding: Dp = 18.dp,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val shape = RoundedCornerShape(24.dp)
+    val shape = RoundedCornerShape(14.dp)
     Column(
         modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(
-                if (tint != null) Brush.linearGradient(listOf(tint.copy(alpha = 0.22f), tint.copy(alpha = 0.06f)))
-                else Brush.linearGradient(listOf(M.Surface, M.Surface))
-            )
-            .border(1.dp, (tint ?: M.Line).copy(alpha = if (tint != null) 0.35f else 0.6f), shape)
+            .background(M.Surface)
+            .border(1.dp, (tint ?: M.Line).copy(alpha = if (tint != null) 0.45f else 1f), shape)
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(padding),
         content = content,
@@ -85,23 +82,23 @@ fun Tag(
     trailing: (@Composable () -> Unit)? = null,
     onClick: (() -> Unit)? = null,
 ) {
-    val shape = RoundedCornerShape(50)
+    val shape = RoundedCornerShape(7.dp)
     val interaction = remember { MutableInteractionSource() }
     val view = LocalView.current
     Row(
         modifier
             .then(if (onClick != null) Modifier.pressScale(interaction, 0.93f) else Modifier)
             .clip(shape)
-            .background(if (selected) color.copy(alpha = 0.18f) else Color.Transparent)
-            .border(1.dp, if (selected) color.copy(alpha = 0.55f) else M.Line, shape)
+            .background(if (selected) M.Surface2 else Color.Transparent)
+            .border(1.dp, if (selected) color.copy(alpha = 0.7f) else M.Line, shape)
             .then(if (onClick != null) Modifier.clickable(interactionSource = interaction, indication = null) { Feedback.tap(view); onClick() } else Modifier)
             .padding(horizontal = 12.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (leading != null) { Text(leading, fontSize = 13.sp, color = color); Spacer(Modifier.width(6.dp)) }
+        if (leading != null) { Text(leading, style = MaterialTheme.typography.labelSmall, color = if (selected) M.Copper else M.Faint); Spacer(Modifier.width(7.dp)) }
         Text(
             text, style = MaterialTheme.typography.labelMedium,
-            color = if (selected) color else M.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            color = if (selected) M.Text else M.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
         )
         if (trailing != null) { Spacer(Modifier.width(4.dp)); trailing() }
     }
@@ -147,27 +144,27 @@ fun PrimaryButton(
     leading: ImageVector? = null,
     onClick: () -> Unit,
 ) {
-    val shape = RoundedCornerShape(20.dp)
+    val shape = RoundedCornerShape(10.dp)
     val interaction = remember { MutableInteractionSource() }
     val view = LocalView.current
     Row(
         modifier
             .pressScale(interaction)
             .clip(shape)
-            .background(if (enabled) color else M.Surface2)
+            .background(if (enabled) (if (color == M.Lilac) M.Text else color) else M.Surface2)
             .clickable(enabled = enabled, interactionSource = interaction, indication = null) { Feedback.tap(view); Feedback.play(Feedback.Sound.TAP, 0.45f); onClick() }
             .padding(horizontal = 22.dp, vertical = 16.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (leading != null) { Icon(leading, null, tint = M.Ink, modifier = Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)) }
-        Text(text, style = MaterialTheme.typography.labelLarge, color = if (enabled) M.Ink else M.Faint)
+        if (leading != null) { Icon(leading, null, tint = M.Ink, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)) }
+        Text(text.uppercase(), style = MaterialTheme.typography.labelLarge, color = if (enabled) M.Ink else M.Faint)
     }
 }
 
 @Composable
 fun GhostButton(text: String, modifier: Modifier = Modifier, color: Color = M.Text, leading: ImageVector? = null, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(20.dp)
+    val shape = RoundedCornerShape(10.dp)
     val interaction = remember { MutableInteractionSource() }
     val view = LocalView.current
     Row(
@@ -178,7 +175,7 @@ fun GhostButton(text: String, modifier: Modifier = Modifier, color: Color = M.Te
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (leading != null) { Icon(leading, null, tint = color, modifier = Modifier.size(19.dp)); Spacer(Modifier.width(8.dp)) }
-        Text(text, style = MaterialTheme.typography.labelLarge, color = color)
+        Text(text.uppercase(), style = MaterialTheme.typography.labelLarge, color = color)
     }
 }
 
@@ -195,7 +192,7 @@ fun PulsingDot(color: Color, size: Dp = 9.dp) {
 @Composable
 fun EmptyState(emoji: String, title: String, body: String, modifier: Modifier = Modifier) {
     Column(modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(emoji, fontSize = 44.sp)
+        DotRing(fraction = 0f, size = 44.dp, dots = 20)
         Spacer(Modifier.height(12.dp))
         Text(title, style = MaterialTheme.typography.headlineSmall, color = M.Text)
         Spacer(Modifier.height(6.dp))
@@ -206,8 +203,8 @@ fun EmptyState(emoji: String, title: String, body: String, modifier: Modifier = 
 @Composable
 fun Banner(text: String, color: Color = M.Butter, modifier: Modifier = Modifier) {
     Row(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(color.copy(alpha = 0.14f))
-            .border(1.dp, color.copy(alpha = 0.35f), RoundedCornerShape(16.dp)).padding(12.dp),
+        modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(M.Surface)
+            .border(1.dp, color.copy(alpha = 0.5f), RoundedCornerShape(8.dp)).padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Dot(color)
@@ -219,15 +216,16 @@ fun Banner(text: String, color: Color = M.Butter, modifier: Modifier = Modifier)
 @Composable
 fun StatTile(value: String, label: String, color: Color, modifier: Modifier = Modifier) {
     Column(
-        modifier.clip(RoundedCornerShape(20.dp)).background(color.copy(alpha = 0.12f))
-            .border(1.dp, color.copy(alpha = 0.3f), RoundedCornerShape(20.dp)).padding(14.dp)
+        modifier.clip(RoundedCornerShape(12.dp)).background(M.Surface)
+            .border(1.dp, M.Line, RoundedCornerShape(12.dp)).padding(14.dp)
     ) {
-        Text(value, style = MaterialTheme.typography.headlineMedium, color = color, fontWeight = FontWeight.SemiBold)
-        Text(label, style = MaterialTheme.typography.bodySmall, color = M.Muted)
+        Text(value, style = MaterialTheme.typography.headlineMedium, color = M.Text, fontWeight = FontWeight.Medium)
+        Text(label.uppercase(), style = MaterialTheme.typography.labelSmall, color = M.Faint)
     }
 }
 
-val moodFaces = listOf("😣", "😕", "😐", "🙂", "😄")
+/** Le mood est un niveau, pas un visage : cinq crans. */
+val moodFaces = listOf("1", "2", "3", "4", "5")
 val moodLabels = listOf("Dur", "Bof", "Correct", "Bien", "Super")
 
 

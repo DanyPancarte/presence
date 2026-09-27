@@ -43,7 +43,7 @@ import androidx.core.content.ContextCompat
 import app.murmure.MurmureApp
 import app.murmure.ui.capture.Wordmark
 import app.murmure.ui.components.Banner
-import app.murmure.ui.components.Orb
+import app.murmure.ui.components.DotOrb
 import app.murmure.ui.components.PrimaryButton
 import app.murmure.ui.settings.ApiKeyField
 import app.murmure.ui.settings.testAndConfigure
@@ -53,16 +53,16 @@ import kotlinx.coroutines.launch
 private data class Page(val emoji: String, val title: String, val lines: List<String>)
 
 private val pages = listOf(
-    Page("", "Parle.\nÇa s'organise.", listOf("Un carnet de notes entièrement vocal.", "Tu ouvres, tu parles : la note s'écrit, se structure et se classe.")),
-    Page("⚡", "Pensé pour les cerveaux qui vont vite", listOf(
+    Page("01", "Parle.\nÇa s'organise.", listOf("Un carnet entièrement vocal.", "Tu ouvres, tu parles : la note s'écrit, se structure et se classe.")),
+    Page("02", "Pensé pour les cerveaux qui vont vite", listOf(
         "Zéro décision avant de parler : un seul gros bouton.",
         "Dis « une note pour le dossier X » : je comprends.",
         "Je propose le classement, les liens et les tâches. Tu confirmes d'un tap. Rien n'est imposé.",
     )),
-    Page("🔒", "Privé par défaut", listOf(
-        "Tes notes restent sur ton téléphone, dans une base chiffrée.",
-        "Export et suppression totale en tout temps.",
-        "Un miroir bienveillant, jamais un outil clinique.",
+    Page("03", "Privé. Local.", listOf(
+        "L'intelligence tourne sur ton téléphone (Gemini Nano). Rien ne sort sans ta clé.",
+        "Base chiffrée, export et suppression totale en tout temps.",
+        "Un miroir descriptif, jamais un outil clinique.",
     )),
 )
 
@@ -99,8 +99,8 @@ fun OnboardingScreen(onDone: () -> Unit) {
             if (i < pages.size) {
                 val p = pages[i]
                 Column(Modifier.fillMaxSize().padding(horizontal = 28.dp), verticalArrangement = Arrangement.Center) {
-                    if (i == 0) Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { Orb(200.dp) { scope.launch { pager.animateScrollToPage(1) } } }
-                    else Text(p.emoji, fontSize = 56.sp)
+                    if (i == 0) Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { DotOrb(size = 220.dp, level = 0f, listening = true) }
+                    else Text(p.emoji, style = MaterialTheme.typography.labelLarge, color = M.Copper)
                     Spacer(Modifier.height(28.dp))
                     Text(p.title, style = MaterialTheme.typography.displayMedium, color = M.Text)
                     Spacer(Modifier.height(16.dp))
@@ -115,12 +115,12 @@ fun OnboardingScreen(onDone: () -> Unit) {
                     Spacer(Modifier.height(24.dp))
                     Text("1 · Le micro", style = MaterialTheme.typography.titleLarge, color = M.Text)
                     Spacer(Modifier.height(8.dp))
-                    if (micOk) Banner("Micro autorisé ✓", M.Mint)
+                    if (micOk) Banner("MICRO AUTORISÉ", M.Mint)
                     else PrimaryButton("Autoriser le micro", color = M.Peach, leading = Icons.Rounded.Mic) { mic.launch(Manifest.permission.RECORD_AUDIO) }
                     Spacer(Modifier.height(26.dp))
-                    Text("2 · Ta clé IA (Google Gemini)", style = MaterialTheme.typography.titleLarge, color = M.Text)
+                    Text("2 · Clé IA (optionnelle)", style = MaterialTheme.typography.titleLarge, color = M.Text)
                     Text(
-                        "Elle active la transcription en direct et toute l'intelligence. Gratuite sur aistudio.google.com/apikey. Tu peux aussi l'ajouter plus tard.",
+                        "Sans clé, Brainmeat pense sur l'appareil avec Gemini Nano. Une clé Gemini ajoute la transcription en direct. Tu peux l'ajouter plus tard.",
                         style = MaterialTheme.typography.bodySmall, color = M.Muted, modifier = Modifier.padding(vertical = 8.dp),
                     )
                     ApiKeyField(key, { key = it; msg = null }, "Colle ta clé ici")
@@ -143,7 +143,7 @@ fun OnboardingScreen(onDone: () -> Unit) {
                             "Une notification douce vers 20h30 pour raconter ta journée. Modifiable dans Réglages.",
                             style = MaterialTheme.typography.bodySmall, color = M.Muted, modifier = Modifier.padding(vertical = 8.dp),
                         )
-                        if (notifAsked) Banner("C'est noté ✓", M.Mint)
+                        if (notifAsked) Banner("NOTÉ", M.Mint)
                         else PrimaryButton("Activer le rappel", color = M.Butter) {
                             notifAsked = true
                             notif.launch(Manifest.permission.POST_NOTIFICATIONS)

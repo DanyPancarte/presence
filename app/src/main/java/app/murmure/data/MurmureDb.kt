@@ -11,7 +11,7 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
         FolderEntity::class, NoteEntity::class, MentionEntity::class, NoteMention::class,
         NoteLink::class, TaskEntity::class, ReportEntity::class, CaptureEntity::class, EventEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class MurmureDb : RoomDatabase() {

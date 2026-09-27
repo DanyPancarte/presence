@@ -150,3 +150,36 @@ class InsightsTest {
         assertNotNull(p.avgMood)
     }
 }
+
+
+class AdherenceTest {
+    private fun task(id: String, status: String, due: String?, created: Long = 0L, postponed: Int = 0, original: String? = null, done: Long? = null) =
+        app.murmure.data.TaskEntity(id = id, noteId = null, text = id, dueDate = due, status = status, createdAt = created, postponed = postponed, originalDue = original, completedAt = done)
+
+    @Test fun rateAndSlip() {
+        val today = LocalDate.of(2026, 9, 27)
+        val tasks = listOf(
+            task("a", "done", "2026-09-20", done = 1758400000000L),
+            task("b", "done", "2026-09-25", postponed = 2, original = "2026-09-21"),
+            task("c", "abandoned", "2026-09-22"),
+            task("d", "open", "2026-09-20"),      // en retard
+            task("e", "open", "2026-10-05"),      // à venir : hors calcul
+            task("f", "suggested", null),
+        )
+        val a = app.murmure.insights.Adherences.compute(tasks, emptyList(), today)
+        assertEquals(5, a.total); assertEquals(2, a.done); assertEquals(1, a.abandoned); assertEquals(1, a.late)
+        assertEquals(0.5f, a.rate, 0.001f)
+        assertEquals(1, a.postponedTasks); assertEquals(4f, a.avgSlipDays, 0.01f)
+    }
+
+    @Test fun influencesReadTensionAndSupport() {
+        val t = LocalDate.of(2026, 9, 27)
+        fun note(day: LocalDate, mood: Int, id: String) = NoteEntity(id = id, title = id, body = "", rawTranscript = "", status = NoteStatus.FILED, createdAt = 0, updatedAt = 0, dayKey = day.toString(), isDaily = true, mood = mood, timeOfDay = "soir")
+        val notes = (0 until 8).map { note(t.minusDays(it.toLong()), if (it % 2 == 0) 5 else 1, "n$it") }
+        val julie = MentionEntity("j", "Julie", "person", "julie"); val marc = MentionEntity("m", "Marc", "person", "marc")
+        val mentions = (0 until 8).map { NoteMention("n$it", if (it % 2 == 0) "j" else "m", if (it % 2 == 0) 0.6f else -0.6f) }
+        val inf = app.murmure.insights.Adherences.influences(notes, listOf(julie, marc), mentions, setOf("person"), t)
+        assertEquals("soutien", inf.first { it.entity.name == "Julie" }.reading)
+        assertEquals("tension", inf.first { it.entity.name == "Marc" }.reading)
+    }
+}

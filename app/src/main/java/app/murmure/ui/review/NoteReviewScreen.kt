@@ -149,7 +149,7 @@ fun NoteReviewScreen(nav: NavHostController, id: String) {
                     Spacer(Modifier.height(10.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Contexte", style = MaterialTheme.typography.labelMedium, color = M.Muted, modifier = Modifier.width(70.dp))
-                        Tag(n.timeOfDay.ifBlank { "—" }, M.Butter, leading = "🕐")
+                        Tag(n.timeOfDay.ifBlank { "—" }, M.Butter, leading = "HR")
                         n.mood?.let { Spacer(Modifier.width(6.dp)); Tag("mood $it/5", Palette.mood(it.toFloat()), leading = app.murmure.ui.components.moodFaces[it - 1]) }
                     }
                 }
@@ -223,7 +223,7 @@ private fun FolderCard(ui: NoteReviewUi, vm: NoteReviewViewModel) {
         Eyebrow(if (ui.proposal?.declaredFolder != null) "Dossier annoncé" else "Classement recommandé", color = M.Rose)
         Spacer(Modifier.height(10.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("📁", fontSize = 26.sp)
+            Text("DO", fontSize = 26.sp)
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(ui.folder, style = MaterialTheme.typography.headlineSmall, color = M.Text)
@@ -236,14 +236,14 @@ private fun FolderCard(ui: NoteReviewUi, vm: NoteReviewViewModel) {
             if (top != null) Text("${(top.confidence * 100).toInt()} %", style = MaterialTheme.typography.labelMedium, color = M.Rose)
         }
         Spacer(Modifier.height(12.dp))
-        Tag(if (changing) "Garder ce dossier" else "Changer de dossier", M.Lilac, selected = changing, leading = if (changing) "✓" else "↺") { changing = !changing }
+        Tag(if (changing) "Garder ce dossier" else "Changer de dossier", M.Lilac, selected = changing, leading = if (changing) "OK" else "↺") { changing = !changing }
         AnimatedVisibility(changing, enter = expandVertically() + fadeIn(), exit = shrinkVertically()) {
             Column(Modifier.padding(top = 12.dp)) {
                 if (sugg.size > 1) {
                     Text("Autres recommandations", style = MaterialTheme.typography.labelMedium, color = M.Muted)
                     Spacer(Modifier.height(6.dp))
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        sugg.forEach { s -> Tag(s.name, M.Rose, selected = s.name == ui.folder, leading = if (s.existing) "📁" else "✨") { vm.setFolder(s.name); changing = false } }
+                        sugg.forEach { s -> Tag(s.name, M.Rose, selected = s.name == ui.folder, leading = if (s.existing) "DO" else "SG") { vm.setFolder(s.name); changing = false } }
                     }
                     Spacer(Modifier.height(10.dp))
                 }
@@ -292,7 +292,7 @@ private fun TaskRow(t: NoteTaskChoice, onToggle: () -> Unit, onDue: (String?) ->
             if (t.task.reason.isNotBlank()) Text(t.task.reason, style = MaterialTheme.typography.labelSmall, color = M.Faint)
         }
         Spacer(Modifier.width(8.dp))
-        Tag(Dates.prettyDue(t.task.due), M.Butter, leading = "📅") {
+        Tag(Dates.prettyDue(t.task.due), M.Butter, leading = "EV") {
             val i = options.indexOf(t.task.due)
             onDue(options[(i + 1) % options.size])
         }
@@ -328,7 +328,7 @@ private fun Success(ui: NoteReviewUi, onDone: () -> Unit) {
                 .background(Brush.linearGradient(listOf(M.Mint, M.Sky))),
             contentAlignment = Alignment.Center,
         ) {
-            if (daily) Text("🔥", fontSize = 54.sp) else Icon(Icons.Rounded.Check, null, tint = M.Ink, modifier = Modifier.size(64.dp))
+            if (daily) Text("ST", fontSize = 54.sp) else Icon(Icons.Rounded.Check, null, tint = M.Ink, modifier = Modifier.size(64.dp))
         }
         Spacer(Modifier.height(24.dp))
         Text(

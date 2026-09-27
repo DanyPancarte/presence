@@ -290,7 +290,22 @@ class Repository(
         dao.deleteNote(id); dao.clearMentions(id); dao.clearLinks(id); dao.pruneEntities()
     }
 
-    suspend fun setTask(id: String, status: String) = dao.setTaskStatus(id, status)
+    val allTasks = dao.allTasksFlow()
+
+    suspend fun setTask(id: String, status: String) {
+        val t = dao.task(id) ?: return
+        dao.upsertTask(t.copy(status = status, completedAt = if (status == TaskStatus.DONE) System.currentTimeMillis() else null))
+    }
+
+    /** Repousser = un signal d'adhérence, pas juste une date. */
+    suspend fun postponeTask(id: String, days: Long) {
+        val t = dao.task(id) ?: return
+        val base = Dates.parseDay(t.dueDate) ?: Dates.today()
+        val next = maxOf(base, Dates.today()).plusDays(days)
+        dao.upsertTask(t.copy(dueDate = next.toString(), postponed = t.postponed + 1, originalDue = t.originalDue ?: t.dueDate))
+    }
+
+    suspend fun abandonTask(id: String) = setTask(id, TaskStatus.ABANDONED)
     suspend fun updateTask(t: TaskEntity) = dao.upsertTask(t)
 
     // ---------------- Comptes rendus IA ----------------

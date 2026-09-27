@@ -10,9 +10,10 @@ object NoteTypes {
         "reflexion" -> "Réflexion"; "idee" -> "Idée"; "descriptif" -> "Descriptif"; "tache" -> "Tâche"
         else -> "—"
     }
+    /** Code mono à deux lettres, à la place d'un pictogramme. */
     fun emoji(t: String?) = when (t) {
-        "journal" -> "📓"; "travail" -> "💼"; "personnel" -> "🌿"; "reflexion" -> "🌀"
-        "idee" -> "💡"; "descriptif" -> "🔎"; "tache" -> "✅"; else -> "•"
+        "journal" -> "JR"; "travail" -> "TR"; "personnel" -> "PE"; "reflexion" -> "RF"
+        "idee" -> "ID"; "descriptif" -> "DS"; "tache" -> "TA"; else -> "--"
     }
 }
 
@@ -21,11 +22,8 @@ object Emotions {
         "joie", "gratitude", "fierté", "excitation", "calme", "neutre",
         "fatigue", "stress", "anxiété", "tristesse", "frustration", "colère",
     )
-    fun emoji(e: String?) = when (e) {
-        "joie" -> "😊"; "gratitude" -> "🙏"; "fierté" -> "🦁"; "excitation" -> "⚡"; "calme" -> "🌊"
-        "neutre" -> "😐"; "fatigue" -> "🥱"; "stress" -> "😣"; "anxiété" -> "🌪️"; "tristesse" -> "🌧️"
-        "frustration" -> "😤"; "colère" -> "🔥"; else -> "•"
-    }
+    /** Signe de polarité : + / = / − */
+    fun emoji(e: String?) = when (valence(e)) { in 0.3f..1f -> "+"; in -1f..-0.3f -> "−"; else -> "=" }
     fun valence(e: String?) = when (e) {
         "joie", "gratitude", "fierté", "excitation" -> 0.8f
         "calme" -> 0.5f

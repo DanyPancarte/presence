@@ -22,9 +22,11 @@ open class MurmureApp : Application(), Configuration.Provider {
     lateinit var client: GeminiClient; private set
     lateinit var analyzer: NoteAnalyzer; private set
     lateinit var claude: app.murmure.ai.ClaudeClient; private set
+    lateinit var nano: app.murmure.ai.NanoClient; private set
+    lateinit var router: app.murmure.ai.AiRouter; private set
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    val repo: Repository by lazy { Repository(openDatabase(), settings, client) }
+    val repo: Repository by lazy { Repository(openDatabase(), settings, client, router) }
 
     protected open fun createVault(): Vault = Vault(this)
     protected open fun openDatabase(): MurmureDb = MurmureDb.open(this, vault.databasePassphrase())
@@ -40,7 +42,14 @@ open class MurmureApp : Application(), Configuration.Provider {
         settings = SettingsStore(this, vault)
         client = GeminiClient(GeminiClient.defaultHttp())
         claude = app.murmure.ai.ClaudeClient(client.http)
-        analyzer = NoteAnalyzer(app.murmure.ai.AiRouter(client, claude))
+        nano = app.murmure.ai.NanoClient(this)
+        router = app.murmure.ai.AiRouter(client, claude, nano)
+        analyzer = NoteAnalyzer(router)
+        appScope.launch {
+            val st = nano.refresh(download = true)
+            settings.update { it.copy(nanoReady = st == app.murmure.ai.NanoClient.State.READY) }
+            if (st == app.murmure.ai.NanoClient.State.READY) nano.warmup()
+        }
         app.murmure.ui.components.Feedback.init(this)
         appScope.launch {
             settings.state.collect { s ->

@@ -1,23 +1,36 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <!-- Bulle de parole « Murmure » -->
-    <path android:pathData="M54,30C67.3,30 78,39.8 78,52C78,64.2 67.3,74 54,74C50.2,74 46.6,73.2 43.4,71.8L33,77.5L35.6,67.3C32.1,63.3 30,57.9 30,52C30,39.8 40.7,30 54,30Z">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:type="linear"
-                android:startX="32" android:startY="30"
-                android:endX="78" android:endY="76">
-                <item android:offset="0" android:color="#FFFFB8A0" />
-                <item android:offset="0.55" android:color="#FFE9B4F0" />
-                <item android:offset="1" android:color="#FFB9A4FF" />
-            </gradient>
-        </aapt:attr>
-    </path>
-    <!-- Onde vocale -->
-    <path android:strokeColor="#FF14121F" android:strokeWidth="4.6" android:strokeLineCap="round"
-        android:pathData="M42.5,49L42.5,55M49.5,43.5L49.5,60.5M56.5,46.5L56.5,57.5M63.5,50L63.5,54" />
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <!-- Brainmeat : un cerveau en matrice de points, un seul point cuivre -->
+    <group android:translateX="54" android:translateY="54">
+        <path android:fillColor="#ECE9E2" android:pathData="M-14,-16m-1.6,0a1.6,1.6 0 1,0 3.2,0a1.6,1.6 0 1,0 -3.2,0" />
+        <path android:fillColor="#ECE9E2" android:pathData="M-7,-20m-1.6,0a1.6,1.6 0 1,0 3.2,0a1.6,1.6 0 1,0 -3.2,0" />
+        <path android:fillColor="#ECE9E2" android:pathData="M0,-21m-1.6,0a1.6,1.6 0 1,0 3.2,0a1.6,1.6 0 1,0 -3.2,0" />
+        <path android:fillColor="#ECE9E2" android:pathData="M7,-20m-1.6,0a1.6,1.6 0 1,0 3.2,0a1.6,1.6 0 1,0 -3.2,0" />
+        <path android:fillColor="#ECE9E2" android:pathData="M14,-16m-1.6,0a1.6,1.6 0 1,0 3.2,0a1.6,1.6 0 1,0 -3.2,0" />
+        <path android:fillColor="#ECE9E2" android:pathData="M-19,-9m-1.6,0a1.6,1.6 0 1,0 3.2,0a1.6,1.6 0 1,0 -3.2,0" />
+        <path android:fillColor="#ECE9E2" android:pathData="M19,-9m-1.6,0a1.6,1.6 0 1,0 3.2,0a1.6,1.6 0 1,0 -3.2,0" />
+        <path android:fillColor="#ECE9E2" android:pathData="M-21,-1m-1.6,0a1.6,1.6 0 1,0 3.2,0a1.6,1.6 0 1,0 -3.2,0" />
+        <path android:fillColor="#ECE9E2" android:pathData="M21,-1m-1.6,0a1.6,1.6 0 1,0 3.2,0a1.6,1.6 0 1,0 -3.2,0" />
+        <path android:fillColor="#ECE9E2" android:pathData="M-19,7m-1.6,0a1.6,1.6 0 1,0 3.2,0a1.6,1.6 0 1,0 -3.2,0" />
+        <path android:fillColor="#ECE9E2" android:pathData="M19,7m-1.6,0a1.6,1.6 0 1,0 3.2,0a1.6,1.6 0 1,0 -3.2,0" />
+        <path android:fillColor="#ECE9E2" android:pathData="M-14,14m-1.6,0a1.6,1.6 0 1,0 3.2,0a1.6,1.6 0 1,0 -3.2,0" />
+        <path android:fillColor="#ECE9E2" android:pathData="M14,14m-1.6,0a1.6,1.6 0 1,0 3.2,0a1.6,1.6 0 1,0 -3.2,0" />
+        <path android:fillColor="#ECE9E2" android:pathData="M-7,18m-1.6,0a1.6,1.6 0 1,0 3.2,0a1.6,1.6 0 1,0 -3.2,0" />
+        <path android:fillColor="#ECE9E2" android:pathData="M7,18m-1.6,0a1.6,1.6 0 1,0 3.2,0a1.6,1.6 0 1,0 -3.2,0" />
+        <path android:fillColor="#ECE9E2" android:pathData="M0,21m-1.6,0a1.6,1.6 0 1,0 3.2,0a1.6,1.6 0 1,0 -3.2,0" />
+        <!-- sillon central -->
+        <path android:fillColor="#8E8B84" android:pathData="M0,-13m-1.3,0a1.3,1.3 0 1,0 2.6,0a1.3,1.3 0 1,0 -2.6,0" />
+        <path android:fillColor="#8E8B84" android:pathData="M0,-6m-1.3,0a1.3,1.3 0 1,0 2.6,0a1.3,1.3 0 1,0 -2.6,0" />
+        <path android:fillColor="#8E8B84" android:pathData="M0,1m-1.3,0a1.3,1.3 0 1,0 2.6,0a1.3,1.3 0 1,0 -2.6,0" />
+        <path android:fillColor="#8E8B84" android:pathData="M0,8m-1.3,0a1.3,1.3 0 1,0 2.6,0a1.3,1.3 0 1,0 -2.6,0" />
+        <!-- hémisphères -->
+        <path android:fillColor="#5B5953" android:pathData="M-10,-8m-1.2,0a1.2,1.2 0 1,0 2.4,0a1.2,1.2 0 1,0 -2.4,0" />
+        <path android:fillColor="#5B5953" android:pathData="M-12,0m-1.2,0a1.2,1.2 0 1,0 2.4,0a1.2,1.2 0 1,0 -2.4,0" />
+        <path android:fillColor="#5B5953" android:pathData="M-9,8m-1.2,0a1.2,1.2 0 1,0 2.4,0a1.2,1.2 0 1,0 -2.4,0" />
+        <path android:fillColor="#5B5953" android:pathData="M10,-8m-1.2,0a1.2,1.2 0 1,0 2.4,0a1.2,1.2 0 1,0 -2.4,0" />
+        <path android:fillColor="#5B5953" android:pathData="M12,0m-1.2,0a1.2,1.2 0 1,0 2.4,0a1.2,1.2 0 1,0 -2.4,0" />
+        <path android:fillColor="#5B5953" android:pathData="M9,8m-1.2,0a1.2,1.2 0 1,0 2.4,0a1.2,1.2 0 1,0 -2.4,0" />
+        <!-- le point cuivre : ce qui pèse -->
+        <path android:fillColor="#C8845A" android:pathData="M6,-1m-2.6,0a2.6,2.6 0 1,0 5.2,0a2.6,2.6 0 1,0 -5.2,0" />
+    </group>
 </vector>

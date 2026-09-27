@@ -67,6 +67,7 @@ import app.murmure.ai.GeminiClient
 import app.murmure.core.Engine
 import app.murmure.core.AiProvider
 import app.murmure.ai.ClaudeClient
+import app.murmure.ai.NanoClient
 import app.murmure.data.DemoData
 import app.murmure.reminder.DailyReminder
 import app.murmure.ui.Routes
@@ -117,7 +118,7 @@ suspend fun testAndConfigure(key: String): Result<String> = runCatching {
     val (text, live) = GeminiClient.pickModels(models)
     app.settings.update { s -> s.copy(apiKey = key.trim(), textModel = text ?: s.textModel, liveModel = live ?: s.liveModel) }
     buildString {
-        append("✓ Clé valide · ${models.size} modèles accessibles\n")
+        append("OK Clé valide · ${models.size} modèles accessibles\n")
         append("Analyse : ${(text ?: app.settings.current.textModel).removePrefix("models/")}\n")
         append(if (live != null) "Direct : ${live.removePrefix("models/")}" else "Direct : aucun modèle Live → mode segments automatique")
     }
@@ -155,12 +156,55 @@ fun SettingsScreen(nav: NavHostController) {
         TopBar("Réglages", onBack = { nav.popBackStack() })
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
 
-            // ---------- IA ----------
-            Card(tint = M.Lilac) {
-                Eyebrow("Intelligence · clé API Google Gemini", color = M.Lilac)
+            // ---------- Nano (sur l'appareil) ----------
+            val nanoState by app.nano.state.collectAsState()
+            Card(tint = M.Copper) {
+                Eyebrow("00 · Intelligence sur l'appareil · Gemini Nano", color = M.Copper)
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "Une seule clé active la transcription en direct, le classement, les liens, les comptes rendus et le portrait.",
+                    "Gratuit, hors ligne, instantané. Classement, moments, comptes rendus. Pixel 8 Pro / 9 et appareils avec AICore.",
+                    style = MaterialTheme.typography.bodySmall, color = M.Muted,
+                )
+                Spacer(Modifier.height(10.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Tag(
+                        when (nanoState) {
+                            NanoClient.State.READY -> "PRÊT"
+                            NanoClient.State.DOWNLOADING -> "TÉLÉCHARGEMENT"
+                            NanoClient.State.DOWNLOADABLE -> "À TÉLÉCHARGER"
+                            NanoClient.State.UNAVAILABLE -> "INDISPONIBLE ICI"
+                            else -> "VÉRIFICATION"
+                        },
+                        if (nanoState == NanoClient.State.READY) M.Mint else M.Copper,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    if (nanoState != NanoClient.State.READY) GhostButton("Réessayer") {
+                        scope.launch {
+                            val st = app.nano.refresh(download = true)
+                            app.settings.update { it.copy(nanoReady = st == NanoClient.State.READY) }
+                        }
+                    }
+                }
+                app.nano.lastError?.takeIf { nanoState == NanoClient.State.UNAVAILABLE }?.let {
+                    Text(it.take(160), style = MaterialTheme.typography.labelSmall, color = M.Faint, modifier = Modifier.padding(top = 6.dp))
+                }
+                Spacer(Modifier.height(10.dp))
+                Text("Moteur d'analyse", style = MaterialTheme.typography.labelMedium, color = M.Muted)
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    AiProvider.entries.forEach { p ->
+                        Tag(p.label.uppercase(), M.Copper, selected = s.provider == p) { app.settings.update { it.copy(provider = p) } }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(14.dp))
+            // ---------- IA ----------
+            Card(tint = M.Lilac) {
+                Eyebrow("01 · Google Gemini · clé API (transcription en direct)", color = M.Lilac)
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Active la transcription temps réel (Gemini Live) et peut servir de moteur d'analyse. Quota gratuit remis à zéro chaque jour.",
                     style = MaterialTheme.typography.bodySmall, color = M.Muted,
                 )
                 Spacer(Modifier.height(12.dp))
@@ -195,7 +239,7 @@ fun SettingsScreen(nav: NavHostController) {
             // ---------- Claude (analyse) ----------
             Spacer(Modifier.height(14.dp))
             Card(tint = M.Peach) {
-                Eyebrow("Analyse · Anthropic Claude (option)", color = M.Peach)
+                Eyebrow("02 · Anthropic Claude · clé API (option)", color = M.Peach)
                 Spacer(Modifier.height(6.dp))
                 Text(
                     "Alternative à Gemini pour le classement, les moments, les comptes rendus et le portrait. " +
@@ -228,14 +272,6 @@ fun SettingsScreen(nav: NavHostController) {
                 }
                 claudeResult?.let { (ok, msg) -> Spacer(Modifier.height(10.dp)); Banner(msg, if (ok) M.Mint else M.Coral) }
                 if (s.claudeKey.isNotBlank()) {
-                    Spacer(Modifier.height(10.dp))
-                    Text("Moteur d'analyse", style = MaterialTheme.typography.labelMedium, color = M.Muted)
-                    Spacer(Modifier.height(6.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        AiProvider.entries.forEach { p ->
-                            Tag(p.label, if (p == AiProvider.CLAUDE) M.Peach else M.Lilac, selected = s.provider == p) { app.settings.update { it.copy(provider = p) } }
-                        }
-                    }
                     TextButton(onClick = { app.settings.update { it.copy(claudeKey = "", provider = AiProvider.GEMINI) }; claudeKey = "" }) { Text("Retirer la clé Claude", color = M.Coral) }
                 }
                 Text(
@@ -247,7 +283,7 @@ fun SettingsScreen(nav: NavHostController) {
 
             Spacer(Modifier.height(14.dp))
             Card {
-                Eyebrow("Moteur de transcription")
+                Eyebrow("03 · Moteur de transcription")
                 Spacer(Modifier.height(8.dp))
                 Engine.entries.forEach { e ->
                     Row(
@@ -322,7 +358,7 @@ fun SettingsScreen(nav: NavHostController) {
                 }
                 if (s.reminderEnabled) {
                     Spacer(Modifier.height(6.dp))
-                    Tag("Heure : %02dh%02d".format(s.reminderMinutes / 60, s.reminderMinutes % 60), M.Peach, leading = "⏰") {
+                    Tag("Heure : %02dh%02d".format(s.reminderMinutes / 60, s.reminderMinutes % 60), M.Peach, leading = "HR") {
                         TimePickerDialog(context, { _, h, m ->
                             app.settings.update { it.copy(reminderMinutes = h * 60 + m) }
                             DailyReminder.schedule(context, app.settings.current)

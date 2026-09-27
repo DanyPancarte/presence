@@ -16,6 +16,8 @@ object TaskStatus {
     const val OPEN = "open"
     const val DONE = "done"
     const val DISMISSED = "dismissed"
+    /** Ouverte puis abandonnée volontairement — la matière première de l'adhérence. */
+    const val ABANDONED = "abandoned"
 }
 
 object EntityKind {
@@ -150,6 +152,11 @@ data class TaskEntity(
     val status: String = TaskStatus.SUGGESTED,
     val reason: String = "",
     val createdAt: Long,
+    val completedAt: Long? = null,
+    /** Nombre de fois repoussée. */
+    val postponed: Int = 0,
+    /** Échéance initiale, pour mesurer le glissement. */
+    val originalDue: String? = null,
 )
 
 @Entity(tableName = "reports")

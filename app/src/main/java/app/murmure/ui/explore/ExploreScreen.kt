@@ -82,7 +82,7 @@ fun ExploreScreen(nav: NavHostController) {
             Segmented(listOf("Graphe", "Dossiers"), if (graphTab) 0 else 1) { graphTab = it == 0 }
         }
         if (notes.none { it.status == NoteStatus.FILED }) {
-            EmptyState("🌌", "Ton univers est vide", "Dicte et classe quelques notes : les liens, thèmes et personnes apparaîtront ici.")
+            EmptyState("", "Ton univers est vide", "Dicte et classe quelques notes : les liens, thèmes et personnes apparaîtront ici.")
             if (!graphTab) FolderTree(nav, folders, notes)
             return@Column
         }
@@ -132,7 +132,7 @@ private fun GraphPane(
             ColorMode.entries.forEach { c -> Tag(c.label, M.Peach, selected = c == colorMode) { colorMode = c } }
         }
         Box(Modifier.fillMaxWidth().weight(1f)) {
-            if (model.nodes.isEmpty()) EmptyState("🫧", "Pas encore assez de matière", "Ce mode s'enrichit à mesure que tu parles de gens, d'activités et de thèmes.")
+            if (model.nodes.isEmpty()) EmptyState("", "Pas encore assez de matière", "Ce mode s'enrichit à mesure que tu parles de gens, d'activités et de thèmes.")
             else GraphView(model, selected, { selected = it }, Modifier.fillMaxSize())
             Legend(model, Modifier.align(Alignment.TopEnd).padding(12.dp))
             Text(
@@ -184,7 +184,7 @@ private fun NodeCard(node: GNode, notes: List<NoteEntity>, onClose: () -> Unit, 
             IconButton(onClick = onClose) { Icon(Icons.Rounded.Close, "Fermer", tint = M.Muted) }
         }
         if (node.kind == "folder" && node.ref != null) {
-            Tag("Ouvrir le dossier et son compte rendu", M.Rose, leading = "📁", modifier = Modifier.padding(vertical = 6.dp)) { onFolder(node.ref) }
+            Tag("Ouvrir le dossier et son compte rendu", M.Rose, leading = "DO", modifier = Modifier.padding(vertical = 6.dp)) { onFolder(node.ref) }
         }
         LazyColumn(Modifier.heightIn(max = 220.dp)) {
             items(related, key = { it.id }) { n ->
@@ -218,7 +218,7 @@ private fun FolderTree(nav: NavHostController, folders: List<FolderEntity>, note
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(color.copy(alpha = 0.2f)), contentAlignment = Alignment.Center) {
-                        Text(f.emoji ?: "📁", fontSize = 20.sp)
+                        Text(f.emoji ?: "DO", fontSize = 20.sp)
                     }
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {

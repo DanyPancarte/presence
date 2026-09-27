@@ -13,13 +13,15 @@ enum class Engine(val label: String, val detail: String) {
     DEVICE("Reconnaissance de l'appareil", "Hors clé, moteur vocal Android"),
 }
 
-enum class AiProvider(val label: String) { GEMINI("Google Gemini"), CLAUDE("Anthropic Claude") }
+enum class AiProvider(val label: String) { NANO("Sur l'appareil"), GEMINI("Google Gemini"), CLAUDE("Anthropic Claude") }
 
 data class AppSettings(
     val apiKey: String = "",
     val claudeKey: String = "",
     val claudeModel: String = "claude-haiku-4-5",
-    val provider: AiProvider = AiProvider.GEMINI,
+    val provider: AiProvider = AiProvider.NANO,
+    /** Renseigné à chaud par l'app (pas persisté) : Nano prêt sur cet appareil. */
+    val nanoReady: Boolean = false,
     val cloudSttKey: String = "",
     val engine: Engine = Engine.AUTO,
     val language: String = "fr-CA",
@@ -34,7 +36,7 @@ data class AppSettings(
     val haptics: Boolean = true,
 ) {
     /** Une analyse IA est possible (Gemini ou Claude). */
-    val hasAiKey get() = apiKey.isNotBlank() || claudeKey.isNotBlank()
+    val hasAiKey get() = apiKey.isNotBlank() || claudeKey.isNotBlank() || nanoReady
     /** Moteur d'analyse effectivement utilisé. */
     val activeProvider get() = when {
         provider == AiProvider.CLAUDE && claudeKey.isNotBlank() -> AiProvider.CLAUDE
@@ -59,7 +61,7 @@ class SettingsStore(context: Context, private val vault: Vault) {
         apiKey = vault.getString("api_key").orEmpty(),
         claudeKey = vault.getString("claude_key").orEmpty(),
         claudeModel = prefs.getString("claude_model", "claude-haiku-4-5")!!,
-        provider = runCatching { AiProvider.valueOf(prefs.getString("provider", "GEMINI")!!) }.getOrDefault(AiProvider.GEMINI),
+        provider = runCatching { AiProvider.valueOf(prefs.getString("provider", "NANO")!!) }.getOrDefault(AiProvider.NANO),
         cloudSttKey = vault.getString("stt_key").orEmpty(),
         engine = runCatching { Engine.valueOf(prefs.getString("engine", "AUTO")!!) }.getOrDefault(Engine.AUTO),
         language = prefs.getString("language", "fr-CA")!!,

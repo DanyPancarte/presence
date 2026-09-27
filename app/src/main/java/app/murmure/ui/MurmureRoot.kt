@@ -7,6 +7,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -54,7 +55,7 @@ import app.murmure.ui.explore.ExploreScreen
 import app.murmure.ui.explore.FolderScreen
 import app.murmure.ui.note.NoteScreen
 import app.murmure.ui.onboarding.OnboardingScreen
-import app.murmure.ui.portrait.PortraitScreen
+import app.murmure.ui.insights.InsightsScreen
 import app.murmure.ui.review.ReviewScreen
 import app.murmure.ui.review.NoteReviewScreen
 import app.murmure.ui.settings.SettingsScreen
@@ -78,10 +79,10 @@ object Routes {
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
 
 private val tabs = listOf(
-    Tab(Routes.HOME, "Dicter", Icons.Rounded.GraphicEq),
-    Tab(Routes.EXPLORE, "Explorer", Icons.Rounded.Hub),
-    Tab(Routes.TASKS, "Agenda", Icons.Rounded.CheckCircle),
-    Tab(Routes.PORTRAIT, "Portrait", Icons.Rounded.AutoAwesome),
+    Tab(Routes.HOME, "CAPTURE", Icons.Rounded.GraphicEq),
+    Tab(Routes.EXPLORE, "FLUX", Icons.Rounded.Hub),
+    Tab(Routes.TASKS, "AGENDA", Icons.Rounded.CheckCircle),
+    Tab(Routes.PORTRAIT, "INSIGHTS", Icons.Rounded.AutoAwesome),
 )
 
 @Composable
@@ -116,7 +117,7 @@ fun MurmureRoot(openRitual: Boolean, onRitualHandled: () -> Unit) {
             composable(Routes.HOME) { TabFrame { HomeScreen(nav) } }
             composable(Routes.EXPLORE) { TabFrame { ExploreScreen(nav) } }
             composable(Routes.TASKS) { TabFrame { TasksScreen(nav) } }
-            composable(Routes.PORTRAIT) { TabFrame { PortraitScreen(nav) } }
+            composable(Routes.PORTRAIT) { TabFrame { InsightsScreen(nav) } }
             composable(Routes.SETTINGS) { Frame { SettingsScreen(nav) } }
             composable(
                 "record?daily={daily}",
@@ -156,18 +157,19 @@ private fun BottomBar(nav: NavHostController, route: String?) {
             .background(M.Ink)
             .navigationBarsPadding()
             .padding(horizontal = 14.dp, vertical = 8.dp)
-            .clip(RoundedCornerShape(26.dp))
+            .clip(RoundedCornerShape(14.dp))
             .background(M.Surface)
-            .padding(6.dp),
+            .border(1.dp, M.Line, RoundedCornerShape(14.dp))
+            .padding(4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        tabs.forEach { tab ->
+        tabs.forEachIndexed { idx, tab ->
             val selected = route == tab.route
             Column(
                 Modifier
                     .weight(1f)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(if (selected) M.Lilac.copy(alpha = 0.16f) else M.Surface)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (selected) M.Surface2 else M.Surface)
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
                         app.murmure.ui.components.Feedback.tap(view)
                         if (!selected) nav.navigate(tab.route) {
@@ -179,9 +181,9 @@ private fun BottomBar(nav: NavHostController, route: String?) {
                     .padding(vertical = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Icon(tab.icon, tab.label, tint = if (selected) M.Lilac else M.Muted, modifier = Modifier.size(22.dp))
-                Spacer(Modifier.height(2.dp))
-                Text(tab.label, style = MaterialTheme.typography.labelSmall, color = if (selected) M.Lilac else M.Muted)
+                Text("0${idx + 1}", style = MaterialTheme.typography.labelSmall, color = if (selected) M.Copper else M.Faint)
+                Spacer(Modifier.height(3.dp))
+                Text(tab.label, style = MaterialTheme.typography.labelSmall, color = if (selected) M.Text else M.Muted)
             }
         }
     }

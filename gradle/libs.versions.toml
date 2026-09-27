@@ -1,13 +1,13 @@
 [versions]
-agp = "8.10.1"
-kotlin = "2.0.21"
-ksp = "2.0.21-1.0.28"
+agp = "8.12.3"
+kotlin = "2.3.21"
+ksp = "2.3.12"
 coreKtx = "1.15.0"
 lifecycle = "2.8.7"
 activityCompose = "1.9.3"
 composeBom = "2024.12.01"
 navigation = "2.8.5"
-room = "2.6.1"
+room = "2.8.5"
 okhttp = "4.12.0"
 serialization = "1.7.3"
 coroutines = "1.9.0"
@@ -43,6 +43,7 @@ okhttp-mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver",
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serialization" }
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+mlkit-genai-prompt = { group = "com.google.mlkit", name = "genai-prompt", version = "1.0.0-beta4" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
 androidx-test-core = { group = "androidx.test", name = "core-ktx", version.ref = "androidxTestCore" }

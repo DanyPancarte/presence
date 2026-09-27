@@ -15,7 +15,7 @@ object Palette {
     }
 
     fun kindIcon(k: String?): String = when (k) {
-        "person" -> "👤"; "place" -> "📍"; "activity" -> "🏃"; "project" -> "🚀"; "folder" -> "📁"; "note" -> "📝"; else -> "✦"
+        "person" -> "PR"; "place" -> "LI"; "activity" -> "AC"; "project" -> "PJ"; "folder" -> "DO"; "note" -> "NT"; else -> "CO"
     }
 
     fun type(t: String?): Color = when (t) {
@@ -24,32 +24,19 @@ object Palette {
         "personnel" -> M.Mint
         "reflexion" -> M.Lilac
         "idee" -> M.Butter
-        "descriptif" -> Color(0xFFB8C4FF)
-        "tache" -> M.Peach
+        "descriptif" -> M.Lilac
+        "tache" -> M.Copper
         else -> M.Muted
     }
 
-    fun emotion(e: String?): Color = when (e) {
-        "joie" -> M.Butter
-        "gratitude" -> M.Mint
-        "fierté" -> M.Peach
-        "excitation" -> Color(0xFFFFC56E)
-        "calme" -> M.Sky
-        "neutre" -> Color(0xFFB9B3D1)
-        "fatigue" -> Color(0xFFA99FC9)
-        "stress" -> Color(0xFFFF9F7A)
-        "anxiété" -> Color(0xFFE7A1D8)
-        "tristesse" -> Color(0xFF8FB3FF)
-        "frustration" -> M.Coral
-        "colère" -> Color(0xFFFF6B6B)
-        else -> M.Muted
-    }
+    /** L'émotion est une polarité : menthe vers le haut, corail vers le bas. */
+    fun emotion(e: String?): Color = tone(app.murmure.ai.Emotions.valence(e))
 
     /** -1..1 → corail .. lilas .. menthe */
     fun tone(v: Float): Color = when {
-        v > 0.15f -> lerp(M.Lilac, M.Mint, ((v - 0.15f) / 0.85f).coerceIn(0f, 1f))
-        v < -0.15f -> lerp(M.Lilac, M.Coral, ((-v - 0.15f) / 0.85f).coerceIn(0f, 1f))
-        else -> M.Lilac
+        v > 0.15f -> lerp(M.Muted, M.Mint, ((v - 0.15f) / 0.85f).coerceIn(0f, 1f))
+        v < -0.15f -> lerp(M.Muted, M.Coral, ((-v - 0.15f) / 0.85f).coerceIn(0f, 1f))
+        else -> M.Muted
     }
 
     fun mood(m: Float): Color = tone((m - 3f) / 2f)
@@ -64,18 +51,18 @@ object Palette {
  * Les pastels restent réservés à l'interface.
  */
 object Viz {
-    val Violet = Color(0xFF9085E9)
-    val Orange = Color(0xFFD95926)
-    val Aqua = Color(0xFF199E70)
-    val Other = Color(0xFF6F6F78)
-    val categorical = listOf(Violet, Orange, Aqua)
+    val Violet = Color(0xFFB9B4C6)
+    val Orange = M.Copper
+    val Aqua = Color(0xFF7FA98F)
+    val Other = Color(0xFF55555C)
+    val categorical = listOf(Orange, Violet, Aqua)
 
-    val Positive = Color(0xFF3987E5)
-    val Neutral = Color(0xFF8A8A8A)
-    val Negative = Color(0xFFE66767)
+    val Positive = Color(0xFF8FB39A)
+    val Neutral = Color(0xFF6F6E69)
+    val Negative = Color(0xFFC96B5A)
 
-    val Grid = Color(0xFF2E2A42)
-    val Axis = Color(0xFF45405C)
+    val Grid = Color(0xFF232328)
+    val Axis = Color(0xFF34343B)
 
     /** Polarité -1..1 → rouge .. gris .. bleu (jamais de teinte au milieu). */
     fun diverging(v: Float): Color {

@@ -89,8 +89,14 @@ interface MurmureDao {
     suspend fun clearOutgoingLinks(id: String)
 
     // ---------- Tâches ----------
-    @Query("SELECT * FROM tasks WHERE status != 'dismissed' ORDER BY CASE WHEN dueDate IS NULL THEN 1 ELSE 0 END, dueDate, createdAt DESC")
+    @Query("SELECT * FROM tasks WHERE status != 'dismissed' AND status != 'abandoned' ORDER BY CASE WHEN dueDate IS NULL THEN 1 ELSE 0 END, dueDate, createdAt DESC")
     fun tasksFlow(): Flow<List<TaskEntity>>
+
+    @Query("SELECT * FROM tasks")
+    fun allTasksFlow(): Flow<List<TaskEntity>>
+
+    @Query("SELECT * FROM tasks WHERE id = :id")
+    suspend fun task(id: String): TaskEntity?
 
     @Upsert
     suspend fun upsertTask(t: TaskEntity)

@@ -15,7 +15,7 @@ object MomentKind {
         NOTE -> "Note"; TASK -> "Tâche"; EVENT -> "Agenda"; MOOD -> "Mood"; IDEA -> "Idée"; PERSON -> "Personne"; else -> "Moment"
     }
     fun emoji(k: String) = when (k) {
-        NOTE -> "📝"; TASK -> "✅"; EVENT -> "📅"; MOOD -> "💛"; IDEA -> "💡"; PERSON -> "👤"; else -> "✦"
+        NOTE -> "NT"; TASK -> "TK"; EVENT -> "EV"; MOOD -> "MD"; IDEA -> "ID"; PERSON -> "PR"; else -> "--"
     }
     /** Ce que Murmure « dit » quand il met le moment de côté. */
     fun verb(k: String) = when (k) {

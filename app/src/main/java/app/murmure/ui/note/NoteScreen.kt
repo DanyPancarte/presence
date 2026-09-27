@@ -87,7 +87,7 @@ fun NoteScreen(nav: NavHostController, id: String) {
     }
 
     Column(Modifier.fillMaxSize()) {
-        TopBar(folder?.let { "${it.emoji ?: "📁"} ${it.name}" } ?: "Note", onBack = { nav.popBackStack() }) {
+        TopBar(folder?.let { "${it.emoji ?: "DO"} ${it.name}" } ?: "Note", onBack = { nav.popBackStack() }) {
             IconButton(onClick = { nav.navigate(Routes.reclass(id)) }) { Icon(Icons.Rounded.AutoFixHigh, "Reclasser", tint = M.Muted) }
             IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Rounded.DeleteOutline, "Supprimer", tint = M.Muted) }
         }
@@ -97,12 +97,12 @@ fun NoteScreen(nav: NavHostController, id: String) {
             Text(n.title, style = MaterialTheme.typography.headlineLarge, color = M.Text)
             Spacer(Modifier.height(12.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (n.status == NoteStatus.PENDING) Tag("À classer", M.Butter, leading = "📥") { nav.navigate(Routes.reclass(id)) }
+                if (n.status == NoteStatus.PENDING) Tag("À classer", M.Butter, leading = "IN") { nav.navigate(Routes.reclass(id)) }
                 n.type?.let { Tag(NoteTypes.label(it), Palette.type(it), leading = NoteTypes.emoji(it)) }
                 n.emotion?.let { Tag(it, Palette.emotion(it), leading = Emotions.emoji(it)) }
                 n.energy?.let { Tag("énergie $it", M.Sky) }
                 n.mood?.let { Tag("mood $it/5", Palette.mood(it.toFloat()), leading = moodFaces[it - 1]) }
-                if (n.timeOfDay.isNotBlank()) Tag(n.timeOfDay, M.Butter, leading = "🕐")
+                if (n.timeOfDay.isNotBlank()) Tag(n.timeOfDay, M.Butter, leading = "HR")
             }
             val bodyStart = T.key(n.body.replace(Regex("[\\[\\]#*]"), "").take(60))
             if (n.summary.isNotBlank() && !bodyStart.startsWith(T.key(n.summary.take(40)))) {
@@ -127,7 +127,7 @@ fun NoteScreen(nav: NavHostController, id: String) {
                     Eyebrow("Tâches", color = M.Mint)
                     myTasks.forEach { t ->
                         Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(if (t.status == TaskStatus.DONE) "✅" else "⬜", modifier = Modifier.clickable {
+                            Text(if (t.status == TaskStatus.DONE) "OK" else "⬜", modifier = Modifier.clickable {
                                 scope.launch { repo.setTask(t.id, if (t.status == TaskStatus.DONE) TaskStatus.OPEN else TaskStatus.DONE) }
                             })
                             Spacer(Modifier.width(10.dp))

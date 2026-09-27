@@ -1,12 +1,14 @@
-<p align="center"><img src="docs/screens/00-icone.png" width="420" alt="Murmure"></p>
+<p align="center"><img src="docs/screens/00-icone.png" width="420" alt="Brainmeat"></p>
 
-# Murmure — *Parle. Ça s'organise.*
+# Brainmeat — *Parle. Ça s'organise.*
 
-**Un Obsidian entièrement vocal, pensé pour les cerveaux TDAH.** Tu ouvres, tu pèses sur un bouton, tu parles : la note s'écrit en direct, se structure, se lie à tes autres notes et se classe — **après ton accord**.
+> Prototype mobile avant le périphérique. Un seul matériau (obsidienne), une encre, un accent cuivre, un seul vocabulaire visuel : la **matrice de points**. Intelligence **sur l'appareil** (Gemini Nano) par défaut.
 
-| Dictée live | Validation | Graphe | Portrait |
+**Un Obsidian entièrement vocal, pensé pour les cerveaux TDAH — et un BI sur ce qui pèse sur toi.** Tu ouvres, tu pèses sur un bouton, tu parles : la note s'écrit en direct, se structure, se lie à tes autres notes et se classe — **après ton accord**.
+
+| Dictée live | Validation | Graphe | Insights |
 |---|---|---|---|
-| <img src="docs/screens/02-dictee-live.png" width="200"> | <img src="docs/screens/04-validation.png" width="200"> | <img src="docs/screens/05-graphe.png" width="200"> | <img src="docs/screens/06-portrait.png" width="200"> |
+| <img src="docs/screens/02-dictee-live.png" width="200"> | <img src="docs/screens/04-validation.png" width="200"> | <img src="docs/screens/05-graphe.png" width="200"> | <img src="docs/screens/06-insights.png" width="200"> |
 
 > Captures générées automatiquement par les tests (`docs/screens/`), avec le jeu de données démo.
 
@@ -14,12 +16,24 @@
 
 ## ⬇️ Installer l'APK (2 min)
 
-1. Récupère **`dist/murmure-1.1.1.apk`** (ou l'artefact `murmure-apk` de la CI GitHub Actions).
+1. Récupère **`dist/brainmeat-2.0.0.apk`** (ou l'artefact `murmure-apk` de la CI GitHub Actions).
 2. Sur le téléphone : ouvre le fichier → Android demande d'**autoriser l'installation d'applis inconnues** pour ton navigateur / gestionnaire de fichiers → *Autoriser* → *Installer*.
-   - Par câble : `adb install dist/murmure-1.1.1.apk`
+   - Par câble : `adb install dist/brainmeat-2.0.0.apk`
 3. Android 8.0+ (API 26). Testé en build pour `arm64-v8a`, `armeabi-v7a`, `x86_64`.
 
-## 🔑 Brancher l'IA (clé Google Gemini)
+## 🧠 Intelligence sans clé : Gemini Nano sur l'appareil (2.0)
+
+Par défaut, Brainmeat pense **localement** avec Gemini Nano (ML Kit GenAI Prompt API) : gratuit, hors ligne, instantané, zéro quota. Disponible sur Pixel 8 Pro / 9 et appareils avec AICore ; le modèle se télécharge au premier lancement (Réglages → 00). Sans Nano, les règles locales prennent le relais ; une clé Gemini ou Claude reste possible en surcouche (Réglages → moteur d'analyse).
+
+## 📊 Insights (2.0)
+
+Onglet dédié, quatre lentilles, toutes descriptives : **Mood** (30 jours en points, « pourquoi ce jour-là », selon le moment) · **Entourage** (qui pèse — présence récente pondérée —, tonalité, lecture soutien / neutre / tension, mouvement sur 2 semaines, contextes) · **Adhérence** (tenues vs abandonnées vs repoussées, glissement moyen, selon le jour d'engagement, selon le mood au moment de la promesse) · **Corrélations** (écart de mood avec/sans, thèmes, lecture IA sur agrégats). Dans Agenda, une tâche se **repousse (+1 j / +7 j)** ou s'**abandonne** : c'est cette matière qui nourrit l'adhérence.
+
+## 🎛️ Design system Brainmeat (2.0)
+
+Obsidienne `#0B0B0D` / tuiles `#17171B` / encre chaude `#ECE9E2` / **cuivre `#C8845A`** (seul accent). JetBrains Mono (étiquettes, numéros `01…`) + Space Grotesk (titres, texte). Zéro emoji : codes mono à deux lettres (`NT` note, `TK` tâche, `EV` agenda, `PR` personne…). Matrice de points pour tout : orbe (`DotOrb`), champ de dictée (`DotField`, parallaxe gyroscope), onde (`DotWave`), jauges (`DotRing`), séries (`DotSeries`), barres (`DotBar`).
+
+## 🔑 Clés API (optionnelles)
 
 1. Va sur **https://aistudio.google.com/apikey** → *Create API key* (gratuit, compte Google).
 2. Dans Murmure : écran d'accueil **« On se branche »** (ou **Réglages ⚙️ → Intelligence**) → colle la clé → **Vérifier / Tester et enregistrer**.

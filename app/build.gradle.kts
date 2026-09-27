@@ -11,11 +11,11 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "app.murmure"
+        applicationId = "app.brainmeat"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.1.1"
+        versionCode = 4
+        versionName = "2.0.0"
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
     }
 
@@ -40,9 +40,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
-    }
     buildFeatures {
         compose = true
     }
@@ -53,6 +50,10 @@ android {
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
     }
+}
+
+kotlin {
+    compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) }
 }
 
 ksp {
@@ -79,6 +80,7 @@ dependencies {
     implementation(libs.androidx.sqlite)
     implementation(libs.sqlcipher)
     implementation(libs.okhttp)
+    implementation(libs.mlkit.genai.prompt)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
     debugImplementation(libs.androidx.ui.tooling)

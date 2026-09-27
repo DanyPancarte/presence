@@ -70,7 +70,7 @@ fun FolderScreen(nav: NavHostController, id: String) {
     Column(Modifier.fillMaxSize()) {
         TopBar("", onBack = { nav.popBackStack() })
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp)) {
-            Text(folder?.emoji ?: "📁", fontSize = 40.sp)
+            Text(folder?.emoji ?: "DO", fontSize = 40.sp)
             Text(folder?.name ?: "Dossier", style = MaterialTheme.typography.displayMedium, color = M.Text)
             Text("${mine.size} notes", style = MaterialTheme.typography.labelMedium, color = color)
             Spacer(Modifier.height(10.dp))

@@ -29,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -87,7 +88,7 @@ fun TasksScreen(nav: NavHostController) {
             Spacer(Modifier.padding(8.dp))
         }
         if (tasks.isEmpty() && events.isEmpty()) item {
-            EmptyState("🫶", "Rien à faire, rien de prévu", "Quand tu dis « faut que je… » ou « rendez-vous jeudi 14h », je te le propose ici. Tu restes maître du oui ou du non.")
+            EmptyState("", "Rien à faire, rien de prévu", "Quand tu dis « faut que je… » ou « rendez-vous jeudi 14h », je te le propose ici. Tu restes maître du oui ou du non.")
         }
         if (suggestedEvents.isNotEmpty()) {
             item { Header("Rendez-vous à confirmer", M.Sky) }
@@ -153,7 +154,7 @@ fun TasksScreen(nav: NavHostController) {
         section("Cette semaine", M.Sky, week, ::set, nav)
         section("Plus tard", M.Lilac, later, ::set, nav)
         section("Sans échéance", M.Muted, undated, ::set, nav)
-        section("Fait ✓", M.Mint, done, ::set, nav)
+        section("Fait OK", M.Mint, done, ::set, nav)
         item { Spacer(Modifier.padding(20.dp)) }
     }
 }
@@ -163,7 +164,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.section(
 ) {
     if (list.isEmpty()) return
     item(key = "h-$title") { Header(title, color) }
-    items(list, key = { it.id }) { t -> TaskItem(t, color, { set(t, if (t.status == TaskStatus.DONE) TaskStatus.OPEN else TaskStatus.DONE) }) { t.noteId?.let { nav.navigate(Routes.note(it)) } } }
+    items(list, key = { it.id }) { t -> TaskItem(t, color, { set(t, if (t.status == TaskStatus.DONE) TaskStatus.OPEN else TaskStatus.DONE) }, nav) }
 }
 
 @Composable
@@ -172,11 +173,15 @@ private fun Header(title: String, color: Color) {
 }
 
 @Composable
-private fun TaskItem(t: TaskEntity, color: Color, onToggle: () -> Unit, onOpen: () -> Unit) {
+private fun TaskItem(t: TaskEntity, color: Color, onToggle: () -> Unit, nav: NavHostController) {
     val done = t.status == TaskStatus.DONE
+    val repo = MurmureApp.instance.repo
+    val scope = rememberCoroutineScope()
+    var open by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val bg by animateColorAsState(if (done) M.Mint else Color.Transparent, label = "c")
+    Column(Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(RoundedCornerShape(10.dp)).background(M.Surface).border(1.dp, M.Line, RoundedCornerShape(10.dp))) {
     Row(
-        Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(RoundedCornerShape(16.dp)).background(M.Surface).clickable(onClick = onOpen).padding(12.dp),
+        Modifier.fillMaxWidth().clickable { open = !open }.padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
@@ -189,6 +194,15 @@ private fun TaskItem(t: TaskEntity, color: Color, onToggle: () -> Unit, onOpen: 
             t.text, style = MaterialTheme.typography.bodyMedium, color = if (done) M.Faint else M.Text,
             textDecoration = if (done) TextDecoration.LineThrough else null, modifier = Modifier.weight(1f),
         )
-        if (!done && t.dueDate != null) Tag(Dates.prettyDue(t.dueDate).substringAfter("En retard · "), color)
+        if (t.postponed > 0 && !done) Text("×${t.postponed}", style = MaterialTheme.typography.labelSmall, color = M.Faint, modifier = Modifier.padding(end = 8.dp))
+        if (!done && t.dueDate != null) Tag(Dates.prettyDue(t.dueDate).substringAfter("En retard · ").uppercase(), color)
+    }
+    if (open && !done) Row(Modifier.padding(start = 12.dp, end = 12.dp, bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Tag("+1 J", M.Butter) { scope.launch { repo.postponeTask(t.id, 1) }; open = false }
+        Tag("+7 J", M.Butter) { scope.launch { repo.postponeTask(t.id, 7) }; open = false }
+        Tag("ABANDONNER", M.Coral) { scope.launch { repo.abandonTask(t.id) }; open = false }
+        Spacer(Modifier.weight(1f))
+        if (t.noteId != null) Tag("NOTE", M.Lilac) { nav.navigate(Routes.note(t.noteId)) }
+    }
     }
 }

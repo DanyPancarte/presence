@@ -26,7 +26,7 @@ import app.murmure.ui.explore.ExploreScreen
 import app.murmure.ui.explore.FolderScreen
 import app.murmure.ui.note.NoteScreen
 import app.murmure.ui.onboarding.OnboardingScreen
-import app.murmure.ui.portrait.PortraitScreen
+import app.murmure.ui.insights.InsightsScreen
 import app.murmure.ui.review.ReviewScreen
 import app.murmure.ui.settings.SettingsScreen
 import app.murmure.ui.tasks.TasksScreen
@@ -135,7 +135,7 @@ class ScreenshotTest {
 
     @Test fun graph() { seed(); shoot("05-graphe", true) { ExploreScreen(rememberNavController()) } }
 
-    @Test fun portrait() { seed(); shoot("06-portrait", true) { PortraitScreen(rememberNavController()) } }
+    @Test fun portrait() { seed(); shoot("06-insights", true) { InsightsScreen(rememberNavController()) } }
 
     @Test fun tasks() { seed(); shoot("07-taches", true) { TasksScreen(rememberNavController()) } }
 

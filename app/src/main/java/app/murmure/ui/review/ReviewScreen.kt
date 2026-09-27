@@ -119,7 +119,7 @@ fun ReviewScreen(nav: NavHostController, id: String) {
                 Row(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(M.Lilac.copy(alpha = 0.12f)).padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                ) { Text("✨", fontSize = 16.sp); Spacer(Modifier.width(8.dp)); Text(it, style = MaterialTheme.typography.bodyMedium, color = M.Text) }
+                ) { Text("SIGNAL", style = MaterialTheme.typography.labelSmall, color = M.Copper); Spacer(Modifier.width(10.dp)); Text(it, style = MaterialTheme.typography.bodyMedium, color = M.Text) }
             }
 
             if (ui.notes.isNotEmpty()) {
@@ -187,9 +187,9 @@ private fun Summary(ui: ReviewUi) {
     )
     Spacer(Modifier.height(10.dp))
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (ui.keptNotes.isNotEmpty()) Tag("${ui.keptNotes.size} note${if (ui.keptNotes.size > 1) "s" else ""}", M.Lilac, leading = "📝")
-        ui.tasks.count { it.accepted }.takeIf { it > 0 }?.let { Tag("$it tâche${if (it > 1) "s" else ""}", M.Mint, leading = "✅") }
-        ui.events.count { it.accepted }.takeIf { it > 0 }?.let { Tag("$it agenda", M.Sky, leading = "📅") }
+        if (ui.keptNotes.isNotEmpty()) Tag("${ui.keptNotes.size} note${if (ui.keptNotes.size > 1) "s" else ""}", M.Lilac, leading = "NT")
+        ui.tasks.count { it.accepted }.takeIf { it > 0 }?.let { Tag("$it tâche${if (it > 1) "s" else ""}", M.Mint, leading = "OK") }
+        ui.events.count { it.accepted }.takeIf { it > 0 }?.let { Tag("$it agenda", M.Sky, leading = "EV") }
         ui.mood?.let { Tag("mood ${moodLabels[it - 1].lowercase()}", Palette.mood(it.toFloat()), leading = moodFaces[it - 1]) }
         ui.keptNotes.flatMap { it.entities }.distinctBy { it.name }.take(4).forEach { Tag(it.name, Palette.kind(it.kind), leading = Palette.kindIcon(it.kind)) }
     }
@@ -213,7 +213,7 @@ private fun NoteCard(i: Int, d: NoteDraft, ui: ReviewUi, vm: ReviewViewModel) {
     Card(tint = if (d.kept) Palette.type(d.type) else null, padding = 16.dp) {
         Column(Modifier.animateContentSize()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(NoteTypes.emoji(d.type), fontSize = 18.sp)
+                Text(NoteTypes.emoji(d.type), style = MaterialTheme.typography.labelSmall, color = M.Copper)
                 Spacer(Modifier.width(8.dp))
                 BasicTextField(
                     value = d.title, onValueChange = { vm.setTitle(i, it) },
@@ -228,7 +228,7 @@ private fun NoteCard(i: Int, d: NoteDraft, ui: ReviewUi, vm: ReviewViewModel) {
             val sugg = p.folderSuggestions
             val top = sugg.firstOrNull { it.name == d.folder }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Tag(d.folder, M.Rose, leading = "📁", trailing = { Text(top?.let { " ${(it.confidence * 100).toInt()} %" } ?: "", style = MaterialTheme.typography.labelSmall, color = M.Rose) }) { changing = !changing }
+                Tag(d.folder, M.Rose, leading = "DO", trailing = { Text(top?.let { " ${(it.confidence * 100).toInt()} %" } ?: "", style = MaterialTheme.typography.labelSmall, color = M.Rose) }) { changing = !changing }
                 Spacer(Modifier.width(8.dp))
                 Text(
                     if (changing) "Choisis ci-dessous" else (top?.reason ?: "Ton choix") + (top?.let { if (!it.existing) " · nouveau" else "" } ?: ""),
@@ -239,7 +239,7 @@ private fun NoteCard(i: Int, d: NoteDraft, ui: ReviewUi, vm: ReviewViewModel) {
             AnimatedVisibility(changing, enter = expandVertically() + fadeIn(), exit = shrinkVertically()) {
                 Column(Modifier.padding(top = 10.dp)) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        sugg.forEach { s -> Tag(s.name, M.Rose, selected = s.name == d.folder, leading = if (s.existing) "📁" else "✨") { vm.setFolder(i, s.name); changing = false } }
+                        sugg.forEach { s -> Tag(s.name, M.Rose, selected = s.name == d.folder, leading = if (s.existing) "DO" else "SG") { vm.setFolder(i, s.name); changing = false } }
                         ui.allFolders.filter { f -> sugg.none { it.name == f } }.forEach { f -> Tag(f, M.Sky, selected = f == d.folder) { vm.setFolder(i, f); changing = false } }
                     }
                     Spacer(Modifier.height(8.dp))
@@ -316,7 +316,7 @@ private fun TaskRow(t: TaskChoice, onToggle: () -> Unit, onDue: (String?) -> Uni
             if (t.task.reason.isNotBlank()) Text(t.task.reason, style = MaterialTheme.typography.labelSmall, color = M.Faint, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Spacer(Modifier.width(8.dp))
-        Tag(Dates.prettyDue(t.task.due), M.Butter, leading = "📅") { onDue(options[(options.indexOf(t.task.due) + 1) % options.size]) }
+        Tag(Dates.prettyDue(t.task.due), M.Butter, leading = "EV") { onDue(options[(options.indexOf(t.task.due) + 1) % options.size]) }
     }
 }
 
@@ -331,7 +331,7 @@ private fun EventRow(e: EventChoice, onToggle: () -> Unit) {
             if (meta.isNotBlank()) Text(meta, style = MaterialTheme.typography.labelSmall, color = M.Faint)
         }
         Spacer(Modifier.width(8.dp))
-        Tag(e.event.due?.let { prettyWhen(it, e.event.allDay) } ?: "?", M.Sky, leading = "🕐")
+        Tag(e.event.due?.let { prettyWhen(it, e.event.allDay) } ?: "?", M.Sky, leading = "HR")
     }
 }
 
@@ -391,7 +391,7 @@ private fun Success(ui: ReviewUi, onDone: () -> Unit) {
     LaunchedEffect(Unit) { shown = true; Feedback.confirm(view); delay(if (daily) 2800 else 1600); onDone() }
     Column(Modifier.fillMaxSize().clickable(onClick = onDone).padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         Box(Modifier.size(120.dp).scale(s).clip(CircleShape).background(Brush.linearGradient(listOf(M.Mint, M.Sky))), contentAlignment = Alignment.Center) {
-            if (daily) Text("🔥", fontSize = 54.sp) else Icon(Icons.Rounded.Check, null, tint = M.Ink, modifier = Modifier.size(64.dp))
+            if (daily) Text("ST", fontSize = 54.sp) else Icon(Icons.Rounded.Check, null, tint = M.Ink, modifier = Modifier.size(64.dp))
         }
         Spacer(Modifier.height(24.dp))
         Text(

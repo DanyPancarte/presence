@@ -96,7 +96,8 @@ import app.murmure.ai.Moment
 import app.murmure.ai.MomentKind
 import app.murmure.core.Dates
 import app.murmure.ui.Routes
-import app.murmure.ui.components.Aura
+import app.murmure.ui.components.DotField
+import app.murmure.ui.components.DotWave
 import app.murmure.ui.components.Banner
 import app.murmure.ui.components.Feedback
 import app.murmure.ui.components.IconAction
@@ -196,7 +197,11 @@ fun RecordContent(
 ) {
     val v = ui.voice
     Box(Modifier.fillMaxSize()) {
-        Aura(level = v.level, valence = ui.valence, energy = ui.energy, listening = v.phase == Phase.LISTENING, modifier = Modifier.fillMaxSize())
+        DotField(
+            level = v.level, valence = ui.valence,
+            weight = (ui.moments.size / 6f).coerceIn(0f, 1f) * (if (ui.energy == "haute") 1f else 0.6f),
+            listening = v.phase == Phase.LISTENING, modifier = Modifier.fillMaxSize(),
+        )
 
         Column(Modifier.fillMaxSize()) {
             // ---------- Barre du haut ----------
@@ -208,7 +213,7 @@ fun RecordContent(
                 val shown = if (daily) (RecordViewModel.DAILY_LIMIT_SEC - ui.elapsedSec).coerceAtLeast(0) else ui.elapsedSec
                 Text(
                     "%d:%02d".format(shown / 60, shown % 60),
-                    style = MaterialTheme.typography.titleMedium, color = if (daily && shown < 30) M.Peach else M.Text,
+                    style = MaterialTheme.typography.labelLarge, color = if (daily && shown < 30) M.Copper else M.Text,
                     modifier = Modifier.padding(end = 16.dp),
                 )
             }
@@ -235,23 +240,23 @@ fun RecordContent(
 
             // ---------- Bas : onde + stop ----------
             Column(Modifier.fillMaxWidth().padding(bottom = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Waveform(ui.levels, Modifier.fillMaxWidth().height(46.dp).padding(horizontal = 28.dp), color = if (daily) M.Peach else M.Lilac)
+                DotWave(ui.levels, Modifier.fillMaxWidth().height(40.dp).padding(horizontal = 28.dp))
                 Spacer(Modifier.height(10.dp))
                 AnimatedContent(ui.saving || v.phase == Phase.FINALIZING, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "stop") { busy ->
                     if (busy) {
                         Row(Modifier.height(84.dp), verticalAlignment = Alignment.CenterVertically) {
                             CircularProgressIndicator(color = M.Lilac, strokeWidth = 3.dp, modifier = Modifier.size(28.dp))
                             Spacer(Modifier.width(14.dp))
-                            Text("Je range tout ça…", style = MaterialTheme.typography.titleMedium, color = M.Text)
+                            Text("JE RANGE.", style = MaterialTheme.typography.labelLarge, color = M.Text)
                         }
                     } else StopButton(progress = if (daily) ui.elapsedSec / RecordViewModel.DAILY_LIMIT_SEC.toFloat() else null, onClick = onStop)
                 }
                 Text(
                     when {
-                        ui.moments.isEmpty() -> if (daily) "5 minutes max · arrête quand tu veux" else "Terminer quand tu veux"
-                        else -> "${ui.moments.size} moment${if (ui.moments.size > 1) "s" else ""} attrapé${if (ui.moments.size > 1) "s" else ""} · Terminer"
+                        ui.moments.isEmpty() -> if (daily) "5 MIN MAX · ARRÊTE QUAND TU VEUX" else "TERMINER"
+                        else -> "${ui.moments.size} MOMENT${if (ui.moments.size > 1) "S" else ""} · TERMINER"
                     },
-                    style = MaterialTheme.typography.labelMedium, color = M.Faint, modifier = Modifier.padding(top = 6.dp),
+                    style = MaterialTheme.typography.labelSmall, color = M.Faint, modifier = Modifier.padding(top = 8.dp),
                 )
             }
         }
@@ -262,7 +267,7 @@ fun RecordContent(
 private fun EngineBadge(ui: LiveUi) {
     val v = ui.voice
     Row(
-        Modifier.clip(RoundedCornerShape(50)).background(M.Surface.copy(alpha = 0.85f)).padding(horizontal = 12.dp, vertical = 6.dp),
+        Modifier.clip(RoundedCornerShape(8.dp)).background(M.Surface.copy(alpha = 0.9f)).border(1.dp, M.Line, RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         when {
@@ -273,13 +278,13 @@ private fun EngineBadge(ui: LiveUi) {
         Spacer(Modifier.width(8.dp))
         Text(
             when {
-                ui.thinking -> "Je réfléchis…"
-                v.phase == Phase.IDLE || v.phase == Phase.STARTING -> "Connexion…"
-                v.phase == Phase.LISTENING -> "J'écoute · ${v.engine}"
-                v.phase == Phase.FINALIZING -> "Finalisation"
-                else -> "Terminé"
+                ui.thinking -> "THINKING"
+                v.phase == Phase.IDLE || v.phase == Phase.STARTING -> "CONNEXION"
+                v.phase == Phase.LISTENING -> "REC · ${v.engine.uppercase()}"
+                v.phase == Phase.FINALIZING -> "FINALISATION"
+                else -> "TERMINÉ"
             },
-            style = MaterialTheme.typography.labelMedium, color = M.Text,
+            style = MaterialTheme.typography.labelSmall, color = M.Text,
         )
     }
 }
@@ -290,7 +295,7 @@ private fun DailyPrompt() {
     LaunchedEffect(Unit) { while (true) { delay(9_000); i = (i + 1) % dailyPrompts.size } }
     AnimatedContent(i, transitionSpec = { fadeIn(tween(600)) togetherWith fadeOut(tween(400)) }, label = "prompt") { idx ->
         Text(
-            dailyPrompts[idx], style = MaterialTheme.typography.headlineSmall, color = M.Peach,
+            dailyPrompts[idx], style = MaterialTheme.typography.headlineSmall, color = M.Copper,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 6.dp),
         )
     }
@@ -306,9 +311,9 @@ private fun ContextStrip(ui: LiveUi) {
             Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            ui.declaredFolder?.let { AnimatedTag("Dossier : $it", M.Rose, "📁") }
-            ui.topic?.let { AnimatedTag("Sujet : $it", M.Lilac, "🧠") }
-            if (ui.emotion != "neutre") AnimatedTag(ui.emotion, Palette.emotion(ui.emotion), Emotions.emoji(ui.emotion))
+            ui.declaredFolder?.let { AnimatedTag(it.uppercase(), M.Text, "DO") }
+            ui.topic?.let { AnimatedTag(it.uppercase(), M.Lilac, "SU") }
+            if (ui.emotion != "neutre") AnimatedTag(ui.emotion.uppercase(), Palette.emotion(ui.emotion), Emotions.emoji(ui.emotion))
         }
     }
 }
@@ -325,11 +330,11 @@ private fun AnimatedTag(text: String, color: Color, leading: String) {
 private fun InsightLine(text: String) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 4.dp)
-            .clip(RoundedCornerShape(16.dp)).background(M.Lilac.copy(alpha = 0.12f)).padding(horizontal = 12.dp, vertical = 9.dp),
+            .clip(RoundedCornerShape(8.dp)).background(M.Surface.copy(alpha = 0.9f)).border(1.dp, M.Line, RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("✨", fontSize = 14.sp)
-        Spacer(Modifier.width(8.dp))
+        Text("SIGNAL", style = MaterialTheme.typography.labelSmall, color = M.Copper)
+        Spacer(Modifier.width(10.dp))
         Text(text, style = MaterialTheme.typography.bodySmall, color = M.Text, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
 }
@@ -361,15 +366,15 @@ fun MomentCard(m: Moment, fresh: Boolean, onDismiss: (() -> Unit)? = null) {
     Column(
         Modifier.scale(s).widthIn(min = 150.dp, max = 230.dp)
             .pressScale(interaction, 0.96f)
-            .clip(RoundedCornerShape(18.dp))
-            .background(Brush.linearGradient(listOf(c.copy(alpha = 0.26f), c.copy(alpha = 0.10f))))
-            .border(1.dp, c.copy(alpha = glow), RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(10.dp))
+            .background(M.Surface.copy(alpha = 0.92f))
+            .border(1.dp, c.copy(alpha = glow), RoundedCornerShape(10.dp))
             .then(if (onDismiss != null) Modifier.clickable(interactionSource = interaction, indication = null) { Feedback.tap(view); onDismiss() } else Modifier)
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(MomentKind.emoji(m.kind), fontSize = 13.sp)
-            Spacer(Modifier.width(6.dp))
+            Text(MomentKind.emoji(m.kind), style = MaterialTheme.typography.labelSmall, color = M.Copper)
+            Spacer(Modifier.width(8.dp))
             Text(MomentKind.verb(m.kind).uppercase(), style = MaterialTheme.typography.labelSmall, color = c)
         }
         Spacer(Modifier.height(4.dp))
@@ -377,12 +382,12 @@ fun MomentCard(m: Moment, fresh: Boolean, onDismiss: (() -> Unit)? = null) {
         val sub = when (m.kind) {
             MomentKind.TASK -> Dates.prettyDue(m.due)
             MomentKind.EVENT -> m.due?.let { prettyWhen(it, m.allDay) } ?: ""
-            MomentKind.MOOD -> m.mood?.let { "${moodFaces[it - 1]} ${moodLabels[it - 1]}" } ?: ""
+            MomentKind.MOOD -> m.mood?.let { "${moodFaces[it - 1]}/5 · ${moodLabels[it - 1]}" } ?: ""
             MomentKind.NOTE -> m.folder?.let { "→ $it" } ?: ""
             else -> ""
         }
         if (sub.isNotBlank()) Text(sub, style = MaterialTheme.typography.labelSmall, color = M.Muted, maxLines = 1)
-        if (onDismiss != null) Text("touche pour retirer", style = MaterialTheme.typography.labelSmall, color = M.Faint.copy(alpha = 0.7f), modifier = Modifier.padding(top = 2.dp))
+        if (onDismiss != null) Text("TOUCHER · RETIRER", style = MaterialTheme.typography.labelSmall, color = M.Faint.copy(alpha = 0.7f), modifier = Modifier.padding(top = 4.dp))
     }
 }
 
@@ -406,13 +411,13 @@ private fun LiveText(ui: LiveUi, modifier: Modifier) {
         Column(Modifier.fillMaxSize().verticalScroll(scroll).padding(horizontal = 24.dp, vertical = 12.dp)) {
             if (full.isBlank()) {
                 Text(
-                    if (v.phase == Phase.LISTENING) "Vas-y, je t'écoute…" else "Je prépare le micro…",
-                    fontFamily = Fraunces, fontSize = 30.sp, lineHeight = 38.sp, color = M.Muted,
+                    if (v.phase == Phase.LISTENING) "J'écoute." else "Micro.",
+                    fontFamily = Fraunces, fontSize = 34.sp, lineHeight = 40.sp, color = M.Muted,
                 )
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    "Dis « nouvelle note », « faut que je… » ou « rendez-vous jeudi 14h » : je trie en direct.",
-                    style = MaterialTheme.typography.bodyMedium, color = M.Faint,
+                    "« NOUVELLE NOTE » · « FAUT QUE JE » · « RENDEZ-VOUS JEUDI 14H »\nJe trie pendant que tu parles.",
+                    style = MaterialTheme.typography.labelSmall, color = M.Faint,
                 )
             } else {
                 val boundary = committed.length.coerceAtMost(full.length)
@@ -439,12 +444,12 @@ private fun LiveText(ui: LiveUi, modifier: Modifier) {
                     spans.forEach { (a, b, c) -> addStyle(SpanStyle(textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline, color = c), a, b) }
                     withStyle(SpanStyle(color = M.Peach.copy(alpha = if (v.phase == Phase.LISTENING) caretA else 0f))) { append(" ▍") }
                 }
-                Text(text, fontFamily = Manrope, fontSize = 24.sp, lineHeight = 36.sp, color = M.Text, fontWeight = FontWeight.Medium)
+                Text(text, fontFamily = Manrope, fontSize = 25.sp, lineHeight = 36.sp, color = M.Text, fontWeight = FontWeight.Normal, letterSpacing = (-0.3).sp)
                 if (v.pending > 0) {
                     Spacer(Modifier.height(8.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         PulsingDot(M.Lilac, 7.dp); Spacer(Modifier.width(6.dp))
-                        Text("transcription de la dernière phrase…", style = MaterialTheme.typography.labelSmall, color = M.Muted)
+                        Text("DERNIÈRE PHRASE EN COURS", style = MaterialTheme.typography.labelSmall, color = M.Muted)
                     }
                 }
             }
@@ -463,15 +468,15 @@ private fun StopButton(progress: Float?, onClick: () -> Unit) {
             val sw = 4.dp.toPx()
             drawCircle(M.Line, size.minDimension / 2 - sw / 2, style = Stroke(sw))
             if (progress != null) drawArc(
-                M.Peach, -90f, 360f * progress.coerceIn(0f, 1f), false,
+                M.Copper, -90f, 360f * progress.coerceIn(0f, 1f), false,
                 topLeft = Offset(sw / 2, sw / 2), size = Size(size.width - sw, size.height - sw), style = Stroke(sw, cap = StrokeCap.Round),
             )
         }
         Box(
-            Modifier.size(64.dp).clip(CircleShape).background(M.Peach)
+            Modifier.size(64.dp).clip(CircleShape).background(M.Text)
                 .clickable(interactionSource = interaction, indication = null) { Feedback.confirm(view); onClick() },
             contentAlignment = Alignment.Center,
-        ) { Icon(Icons.Rounded.Stop, "Terminer", tint = M.Ink, modifier = Modifier.size(30.dp)) }
+        ) { Box(Modifier.size(18.dp).clip(RoundedCornerShape(3.dp)).background(M.Ink)) }
     }
 }
 
@@ -481,9 +486,9 @@ private fun MoodStep(onPick: (Int) -> Unit, onSkip: () -> Unit, onClose: () -> U
     Column(Modifier.fillMaxSize().padding(24.dp)) {
         Row { IconAction(Icons.Rounded.Close, "Fermer", onClick = onClose) }
         Spacer(Modifier.weight(1f))
-        Text("Rituel du jour", style = MaterialTheme.typography.labelSmall, color = M.Peach)
+        Text("02  RITUEL", style = MaterialTheme.typography.labelSmall, color = M.Copper)
         Spacer(Modifier.height(8.dp))
-        Text("Comment ça va,\nlà, maintenant ?", style = MaterialTheme.typography.displayMedium, color = M.Text)
+        Text("Là, maintenant.\nDe 1 à 5 ?", style = MaterialTheme.typography.displayMedium, color = M.Text)
         Spacer(Modifier.height(32.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             moodFaces.forEachIndexed { i, f ->
@@ -491,19 +496,19 @@ private fun MoodStep(onPick: (Int) -> Unit, onSkip: () -> Unit, onClose: () -> U
                 val interaction = remember { MutableInteractionSource() }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(
-                        Modifier.size(58.dp).pressScale(interaction, 0.85f).clip(CircleShape).background(c.copy(alpha = 0.18f))
-                            .border(1.dp, c.copy(alpha = 0.5f), CircleShape)
+                        Modifier.size(58.dp).pressScale(interaction, 0.85f).clip(CircleShape).background(M.Surface)
+                            .border(1.dp, M.Line, CircleShape)
                             .clickable(interactionSource = interaction, indication = null) { Feedback.confirm(view); Feedback.play(Feedback.Sound.TAP); onPick(i + 1) },
                         contentAlignment = Alignment.Center,
-                    ) { Text(f, fontSize = 28.sp) }
+                    ) { Text(f, style = MaterialTheme.typography.headlineMedium, color = c) }
                     Spacer(Modifier.height(6.dp))
                     Text(moodLabels[i], style = MaterialTheme.typography.labelSmall, color = M.Muted)
                 }
             }
         }
         Spacer(Modifier.weight(1f))
-        Text("Ensuite, raconte ta journée. 5 minutes max, pas de pression.", style = MaterialTheme.typography.bodyMedium, color = M.Muted)
+        Text("Ensuite, raconte ta journée. 5 minutes max.", style = MaterialTheme.typography.bodyMedium, color = M.Muted)
         Spacer(Modifier.height(12.dp))
-        TextButton(onClick = onSkip) { Text("Passer cette question", color = M.Faint) }
+        TextButton(onClick = onSkip) { Text("PASSER", style = MaterialTheme.typography.labelSmall, color = M.Faint) }
     }
 }
